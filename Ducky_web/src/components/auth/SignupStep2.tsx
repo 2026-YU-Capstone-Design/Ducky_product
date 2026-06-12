@@ -21,7 +21,7 @@ interface SignupStep2Props {
   /** 이메일 입력 변경 핸들러 */
   handleEmailChange: (e: ChangeEvent<HTMLInputElement>) => void;
   /** 이메일 중복 확인 버튼 클릭 핸들러 */
-  handleDuplicateCheck: () => void;
+  handleDuplicateCheck: () => void | Promise<void>;
   /** 회원가입 단계를 변경하는 함수 (1, 2, 3) */
   setSignupStep: Dispatch<SetStateAction<1 | 2 | 3>>;
 }
@@ -68,7 +68,7 @@ export function SignupStep2({
           <Button
             type="button"
             disabled={!email || !!emailError || isEmailChecked || isCheckingEmail}
-            onClick={handleDuplicateCheck}
+            onClick={() => void handleDuplicateCheck()}
             className={`h-9 w-full rounded-lg border px-4 text-xs font-extrabold shadow-none transition-colors sm:ml-2 sm:w-auto ${
               isEmailChecked || (!email || !!emailError)
                 ? "bg-zinc-100 text-zinc-400 border-zinc-200 hover:bg-zinc-100"

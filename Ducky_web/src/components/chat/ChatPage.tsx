@@ -13,7 +13,6 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { useChatSession } from "@/hooks/useChatSession";
-import { useMockChat } from "@/hooks/useMockChat";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
 import { ChatBubble } from "./ChatBubble";
 import { ChatInput } from "./ChatInput";
@@ -24,23 +23,11 @@ const comfortaa = Comfortaa({
   weight: ["700"],
 });
 
-const useMockChatFallback = process.env.NEXT_PUBLIC_USE_MOCK_CHAT === "true";
-
 export function ChatPage() {
   const [draft, setDraft] = useState("");
   const [isHintOpen, setIsHintOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
-  const apiChat = useChatSession({ enabled: !useMockChatFallback });
-  const mockChat = useMockChat();
-  const chat = useMockChatFallback
-    ? {
-        ...mockChat,
-        error: null,
-        isLoadingSession: false,
-        isReady: true,
-        retry: () => undefined,
-      }
-    : apiChat;
+  const chat = useChatSession();
   const {
     activeSession,
     completeSession,

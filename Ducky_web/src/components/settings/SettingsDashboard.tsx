@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import {
   ArrowRight,
@@ -8,6 +9,7 @@ import {
   Bell,
   Brain,
   Loader2,
+  LogOut,
   Moon,
   RefreshCw,
   UserRound,
@@ -19,6 +21,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { getMe } from "@/lib/api/auth";
 import { getAccessToken } from "@/lib/api/client";
+import { clearAuthSession } from "@/lib/auth/logout";
 import { defaultUser, persistUser } from "@/lib/auth/storage";
 import type { LearningLevel, LearningStyle } from "@/types/user";
 
@@ -90,6 +93,7 @@ function SectionTitle({
 }
 
 export function SettingsDashboard() {
+  const router = useRouter();
   const [darkMode, setDarkMode] = useState(getInitialDarkMode);
   const [studyReminder, setStudyReminder] = useState(true);
   const [user, setUser] = useState(defaultUser);
@@ -134,6 +138,12 @@ export function SettingsDashboard() {
     return () => window.clearTimeout(timer);
   }, [loadUser]);
 
+  const handleLogout = useCallback(() => {
+    clearAuthSession();
+    setUser(defaultUser);
+    router.replace("/");
+  }, [router]);
+
   const learningStyleRows = [
     {
       label: "처리 방식",
@@ -152,14 +162,25 @@ export function SettingsDashboard() {
 
   return (
     <section className="mx-auto flex w-full max-w-[944px] flex-1 flex-col px-5 py-9 transition-colors sm:px-8 lg:px-10">
-      <div className="border-b border-[#E7DDC8] pb-7 dark:border-white/10">
-        <p className="text-sm font-semibold text-[#B88700]">설정</p>
-        <h1 className="mt-3 text-3xl font-bold leading-tight tracking-tight text-gray-950 break-keep dark:text-white sm:text-4xl">
-          학습 환경을 조정합니다
-        </h1>
-        <p className="mt-4 text-base leading-relaxed text-gray-600 break-keep dark:text-gray-300">
-          로그인된 사용자 정보와 학습 성향을 백엔드 기준으로 표시합니다.
-        </p>
+      <div className="flex flex-col gap-4 border-b border-[#E7DDC8] pb-7 dark:border-white/10 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-[#B88700]">설정</p>
+          <h1 className="mt-3 text-3xl font-bold leading-tight tracking-tight text-gray-950 break-keep dark:text-white sm:text-4xl">
+            학습 환경을 조정합니다
+          </h1>
+          <p className="mt-4 text-base leading-relaxed text-gray-600 break-keep dark:text-gray-300">
+            로그인된 사용자 정보와 학습 성향을 백엔드 기준으로 표시합니다.
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          className="h-10 shrink-0 gap-2 border-[#E7DDC8] bg-white px-4 font-bold text-gray-600 hover:bg-red-50 hover:text-red-600 dark:border-white/10 dark:bg-[#24211D] dark:text-gray-200 dark:hover:bg-red-500/10 dark:hover:text-red-200"
+          onClick={handleLogout}
+        >
+          <LogOut className="size-4" aria-hidden="true" />
+          로그아웃
+        </Button>
       </div>
 
       {(isLoadingUser || error) && (

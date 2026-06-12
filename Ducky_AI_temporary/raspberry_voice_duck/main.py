@@ -1,23 +1,21 @@
 import logging
 from typing import Any
 
-from audio_io import record_audio, play_audio
+from audio_io import play_audio, record_audio
 from config import (
     INPUT_AUDIO_PATH,
     NO_SPEECH_MESSAGE,
     RECORD_SECONDS,
     RESPONSE_AUDIO_PATH,
     RUN_CONTINUOUSLY,
-    SERVER_UNAVAILABLE_MESSAGE,
+    SERVER_FAILURE_MESSAGE,
     STT_FAILURE_MESSAGE,
     TTS_FAILURE_MESSAGE,
     ensure_runtime_dirs,
     validate_required_environment,
 )
-from duck_prompt import generate_local_duck_response
 from led_state import LedState
 from server_client import (
-    check_server_health,
     report_iot_error,
     report_iot_state,
     report_tts_complete,
@@ -40,7 +38,9 @@ def _report_error(error_code: str, error: object) -> None:
 
 
 def _message_id_from_response(server_response: dict[str, Any]) -> int | None:
-    raw_message_id = server_response.get("messageId") or server_response.get("assistantMessageId")
+    raw_message_id = server_response.get("messageId") or server_response.get(
+        "assistantMessageId",
+    )
     if isinstance(raw_message_id, int):
         return raw_message_id
     if isinstance(raw_message_id, str) and raw_message_id.isdigit():
@@ -55,18 +55,15 @@ def configure_logging() -> None:
     )
 
 
-def _get_server_or_fallback_response(user_text: str) -> tuple[str, dict[str, Any], bool]:
+def _get_server_response(user_text: str) -> tuple[str, dict[str, Any]]:
     try:
-        if check_server_health():
-            server_response = send_message_to_server(user_text)
-            return server_response["message"].strip(), server_response, True
+        server_response = send_message_to_server(user_text)
     except Exception as exc:
-        logger.warning("Server conversation failed; using local fallback: %s", exc)
+        logger.warning("Server conversation failed: %s", exc)
         _report_error("SERVER_CONVERSATION_FAILED", exc)
+        raise
 
-    _report_state(LedState.FALLBACK)
-    fallback_response = generate_local_duck_response(user_text)
-    return f"{SERVER_UNAVAILABLE_MESSAGE} {fallback_response}", {}, False
+    return server_response["message"].strip(), server_response
 
 
 def _speak(text: str) -> bool:
@@ -95,7 +92,6 @@ def run_once() -> None:
     print(f"사용자: {user_text}")
 
     server_response: dict[str, Any] = {}
-    used_server = False
 
     if user_text == STT_FAILURE_MESSAGE:
         stt_success = False
@@ -107,16 +103,20 @@ def run_once() -> None:
         response_text = NO_SPEECH_MESSAGE
     else:
         _report_state(LedState.THINKING)
-        response_text, server_response, used_server = _get_server_or_fallback_response(user_text)
+        try:
+            response_text, server_response = _get_server_response(user_text)
+        except Exception:
+            _report_state(LedState.ERROR)
+            response_text = SERVER_FAILURE_MESSAGE
 
-    print(f"러버덕: {response_text}")
+    print(f"서버: {response_text}")
 
     _report_state(LedState.SPEAKING)
     tts_success = _speak(response_text)
-    if used_server and tts_success:
+    if server_response and tts_success:
         report_tts_complete(_message_id_from_response(server_response))
 
-    if used_server and server_response.get("shouldSaveLog", True):
+    if server_response and server_response.get("shouldSaveLog", True):
         conversation_id = server_response.get("conversationId")
         if conversation_id is not None and not isinstance(conversation_id, int):
             logger.warning("Invalid conversationId from server: %r", conversation_id)
@@ -167,7 +167,7 @@ def main() -> None:
             _report_state(LedState.ERROR)
             _report_error("UNEXPECTED_LOOP_ERROR", exc)
             print(f"오류 발생: {exc}")
-            _speak("오류가 발생했어요. 잠시 후 다시 시도해 주세요.")
+            _speak("오류가 발생했습니다. 잠시 후 다시 시도해 주세요.")
 
 
 if __name__ == "__main__":

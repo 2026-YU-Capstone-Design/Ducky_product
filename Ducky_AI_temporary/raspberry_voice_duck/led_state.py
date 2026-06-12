@@ -9,6 +9,5 @@ class LedState(str, Enum):
     THINKING = "THINKING"
     SPEAKING = "SPEAKING"
     LOGGING = "LOGGING"
-    FALLBACK = "FALLBACK"
     ERROR = "ERROR"
     STOPPED = "STOPPED"

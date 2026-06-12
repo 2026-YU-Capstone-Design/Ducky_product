@@ -93,8 +93,8 @@ class DocumentFlowTest {
                                 "message", "How should I debug a loop index bug?",
                                 "inputType", "text"
                         ))))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.aiResponse.content").value(containsString("loop notes")));
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.success").value(false));
 
         mockMvc.perform(delete("/api/documents/" + documentId)
                         .header("Authorization", "Bearer " + accessToken))

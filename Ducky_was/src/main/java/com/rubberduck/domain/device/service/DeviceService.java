@@ -1,6 +1,7 @@
 package com.rubberduck.domain.device.service;
 
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -69,6 +70,12 @@ public class DeviceService {
                 .map(DeviceUser::getDevice)
                 .map(DeviceResponse::from)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<User> findLinkedUser(Device device) {
+        return deviceUserRepository.findFirstByDeviceOrderByIdDesc(device)
+                .map(DeviceUser::getUser);
     }
 
     private String required(String value) {

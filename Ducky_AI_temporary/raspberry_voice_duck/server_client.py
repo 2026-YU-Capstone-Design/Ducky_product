@@ -104,7 +104,7 @@ def report_tts_complete(message_id: int | None = None) -> bool:
 
 def report_iot_error(error_code: str, error_message: str) -> bool:
     """
-    Report an error to the BE without interrupting local fallback behavior.
+    Report an error to the BE without interrupting the voice loop.
     """
     return _post_iot_event(
         "/api/iot/error",

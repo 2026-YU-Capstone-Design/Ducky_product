@@ -5,11 +5,16 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.Locale;
 import java.util.Map;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.rubberduck.domain.device.entity.Device;
+import com.rubberduck.domain.device.service.DeviceService;
+import com.rubberduck.domain.user.entity.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,6 +32,9 @@ class AuthDeviceFlowTest {
 
     @Autowired
     private WebApplicationContext context;
+
+    @Autowired
+    private DeviceService deviceService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -60,6 +68,16 @@ class AuthDeviceFlowTest {
 
         JsonNode signupData = readData(signupResult);
         String userId = signupData.get("userInfo").get("id").asText();
+
+        mockMvc.perform(get("/api/auth/email-available")
+                        .param("email", email.toUpperCase(Locale.ROOT)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.available").value(false));
+
+        mockMvc.perform(get("/api/auth/email-available")
+                        .param("email", "new-" + email))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.available").value(true));
 
         MvcResult loginResult = mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -121,6 +139,66 @@ class AuthDeviceFlowTest {
                         .header("Authorization", "Bearer " + accessToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].id").value(deviceId));
+    }
+
+    @Test
+    void linkedDeviceResolvesMostRecentOwnerForIotConversationRouting() throws Exception {
+        String suffix = String.valueOf(System.nanoTime());
+        JsonNode firstSignup = signupUser(
+                "first-" + suffix + "@example.com",
+                "first" + suffix,
+                "Ducky123!"
+        );
+        JsonNode secondSignup = signupUser(
+                "second-" + suffix + "@example.com",
+                "second" + suffix,
+                "Ducky123!"
+        );
+
+        String firstUserId = firstSignup.get("userInfo").get("id").asText();
+        String secondUserId = secondSignup.get("userInfo").get("id").asText();
+
+        MvcResult deviceResult = mockMvc.perform(post("/api/devices")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "serial_number", "raspberry-duck-shared-" + suffix,
+                                "firmware_version", "0.1.0"
+                        ))))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        String deviceId = readData(deviceResult).get("id").asText();
+        linkDevice(deviceId, firstUserId);
+        linkDevice(deviceId, secondUserId);
+
+        Device device = deviceService.getById(Long.parseLong(deviceId));
+        assertThat(deviceService.findLinkedUser(device).map(User::getId))
+                .contains(Long.parseLong(secondUserId));
+    }
+
+    private JsonNode signupUser(String email, String loginId, String password) throws Exception {
+        MvcResult signupResult = mockMvc.perform(post("/api/auth/signup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "name", "Ducky Tester",
+                                "email", email,
+                                "login_id", loginId,
+                                "password", password
+                        ))))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        return readData(signupResult);
+    }
+
+    private void linkDevice(String deviceId, String userId) throws Exception {
+        mockMvc.perform(post("/api/devices/" + deviceId + "/link")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "user_id", userId,
+                                "role", "OWNER"
+                        ))))
+                .andExpect(status().isOk());
     }
 
     private JsonNode readData(MvcResult result) throws Exception {

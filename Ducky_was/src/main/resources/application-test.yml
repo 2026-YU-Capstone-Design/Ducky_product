@@ -17,6 +17,8 @@ spring:
 
 openai:
   api-key:
+  chat-model: gpt-4.1-mini
+  request-timeout-seconds: 1
 
 security:
   jwt:

@@ -1,12 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { LogOut } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { clearAuthSession } from "@/lib/auth/logout";
 import { cn } from "@/lib/utils";
 import { navItems } from "./navItems";
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+
+  const handleLogout = () => {
+    clearAuthSession();
+    router.replace("/");
+  };
 
   return (
     <aside className="hidden min-h-dvh w-64 shrink-0 border-r border-[#ECE7DC] bg-white px-4 py-5 transition-colors dark:border-white/10 dark:bg-[#201D19] md:flex md:flex-col">
@@ -66,6 +74,15 @@ export function Sidebar() {
           );
         })}
       </nav>
+
+      <button
+        type="button"
+        onClick={handleLogout}
+        className="mt-4 flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-bold text-gray-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:text-gray-300 dark:hover:bg-red-500/10 dark:hover:text-red-200"
+      >
+        <LogOut className="size-5 shrink-0" aria-hidden="true" />
+        <span>로그아웃</span>
+      </button>
     </aside>
   );
 }

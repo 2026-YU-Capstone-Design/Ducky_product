@@ -4,9 +4,11 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { Comfortaa } from "next/font/google";
-import { login, signup } from "@/lib/api/auth";
+import { checkEmailAvailability, login, signup } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/client";
+import { ensureDefaultRaspberryLinked } from "@/lib/api/devices";
 import { defaultUser, USER_STORAGE_KEY } from "@/lib/auth/storage";
+import type { User } from "@/types/user";
 
 import { SignupStep1 } from "@/components/auth/SignupStep1";
 import { SignupStep2 } from "@/components/auth/SignupStep2";
@@ -65,7 +67,7 @@ export default function LandingPage() {
   const [passwordConfirmError, setPasswordConfirmError] = useState("");
   const [passwordConfirmSuccess, setPasswordConfirmSuccess] = useState("");
   const [agreeTerms, setAgreeTerms] = useState(false);
-  const [agreeMarketing, setAgreeMarketing] = useState(true);
+  const [agreeMarketing, setAgreeMarketing] = useState(false);
 
   useEffect(() => {
     // 1단계 -> 2단계 전환 (1.2초)
@@ -108,6 +110,18 @@ export default function LandingPage() {
     );
   };
 
+  const finishAuthentication = async (user: User) => {
+    setUser(user);
+
+    try {
+      await ensureDefaultRaspberryLinked(user.id);
+    } catch (deviceLinkError) {
+      console.warn("Default Raspberry link failed", deviceLinkError);
+    }
+
+    router.push(user.onboarded ? "/dashboard" : "/onboarding");
+  };
+
   const handleEmailLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) {
@@ -122,8 +136,7 @@ export default function LandingPage() {
         email,
         password,
       });
-      setUser(user);
-      router.push("/dashboard");
+      await finishAuthentication(user);
     } catch (authError) {
       setError(
         getAuthErrorMessage(
@@ -137,6 +150,12 @@ export default function LandingPage() {
   };
 
   const handleSignupSubmit = async () => {
+    if (!isEmailChecked) {
+      setSignupStep(2);
+      setEmailError("이메일 중복 확인을 먼저 완료해주세요.");
+      return;
+    }
+
     setIsLoading(true);
     setError("");
 
@@ -146,8 +165,7 @@ export default function LandingPage() {
         email,
         password,
       });
-      setUser(user);
-      router.push("/dashboard");
+      await finishAuthentication(user);
     } catch (authError) {
       setError(
         getAuthErrorMessage(
@@ -174,17 +192,39 @@ export default function LandingPage() {
   };
 
   // 회원가입 - 중복확인 핸들러
-  const handleDuplicateCheck = () => {
-    if (emailError || !email) return;
+  const handleDuplicateCheck = async () => {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) return;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      setEmailError("이메일 형식이 올바르지 않습니다.");
+      setIsEmailChecked(false);
+      return;
+    }
+
     setIsCheckingEmail(true);
     setEmailSuccess("");
     setEmailError("");
-    
-    setTimeout(() => {
+
+    try {
+      const result = await checkEmailAvailability(normalizedEmail);
+      if (result.available) {
+        setEmailSuccess("사용 가능한 이메일입니다.");
+        setIsEmailChecked(true);
+      } else {
+        setEmailError("이미 사용 중인 이메일입니다.");
+        setIsEmailChecked(false);
+      }
+    } catch (availabilityError) {
+      setEmailError(
+        getAuthErrorMessage(
+          availabilityError,
+          "이메일 중복 확인에 실패했습니다. 잠시 후 다시 시도해주세요.",
+        ),
+      );
+      setIsEmailChecked(false);
+    } finally {
       setIsCheckingEmail(false);
-      setEmailSuccess("이메일 형식이 확인되었습니다. 중복 여부는 가입 시 서버에서 확인합니다.");
-      setIsEmailChecked(true);
-    }, 300);
+    }
   };
 
   // 회원가입 - 비밀번호 입력 핸들러

@@ -80,7 +80,7 @@ LEARNING_TYPE = {
 NO_SPEECH_MESSAGE = "음성을 잘 듣지 못했어요. 조금 더 가까이에서 다시 말해 주세요."
 STT_FAILURE_MESSAGE = "음성을 텍스트로 바꾸는 중 오류가 발생했어요. 다시 말해 주세요."
 TTS_FAILURE_MESSAGE = "응답 음성을 만드는 중 오류가 발생했어요. 잠시 후 다시 시도해 주세요."
-SERVER_UNAVAILABLE_MESSAGE = "서버 연결이 불안정해서 기본 응답으로 진행할게요."
+SERVER_FAILURE_MESSAGE = "서버 연결에 실패했습니다. 서버 상태를 확인해 주세요."
 
 
 def ensure_runtime_dirs() -> None:

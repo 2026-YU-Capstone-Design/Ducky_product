@@ -7,6 +7,7 @@ import { QuestionCard } from "./QuestionCard";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { Comfortaa } from "next/font/google";
 import { updateLearningStyle } from "@/lib/api/auth";
+import { getAccessToken } from "@/lib/api/client";
 import { defaultUser, persistUser, USER_STORAGE_KEY } from "@/lib/auth/storage";
 import type { LearningStyle } from "@/types/user";
 
@@ -37,25 +38,32 @@ export function OnboardingFlow() {
   const [isAnimating, setIsAnimating] = useState(false);
   const [showResult, setShowResult] = useState(false);
   const [resultData, setResultData] = useState<LearningStyleResult | null>(null);
+  const [saveError, setSaveError] = useState("");
 
   const [user, setUser] = useLocalStorage(USER_STORAGE_KEY, defaultUser);
 
-  const saveLearningStyle = (learningStyle: LearningStyle) => {
-    const nextUser = {
-      ...user,
-      learningStyle,
-      onboarded: true,
-    };
+  const saveLearningStyle = async (learningStyle: LearningStyle) => {
+    if (!getAccessToken()) {
+      router.replace("/");
+      return false;
+    }
 
-    setUser(nextUser);
-    void updateLearningStyle({
-      ...learningStyle,
-      onboarded: true,
-    })
-      .then(persistUser)
-      .catch((error) => {
-        console.error("Learning style save failed", error);
+    setSaveError("");
+
+    try {
+      const savedUser = await updateLearningStyle({
+        ...learningStyle,
+        onboarded: true,
       });
+      setUser(savedUser);
+      persistUser(savedUser);
+      return true;
+    } catch (error) {
+      console.error("Learning style save failed", error);
+      setUser(user);
+      setSaveError("학습 유형 저장에 실패했습니다. 잠시 후 다시 시도해 주세요.");
+      return false;
+    }
   };
 
   const handleSelect = (axis: string, value: string) => {
@@ -74,12 +82,12 @@ export function OnboardingFlow() {
         setCurrentIndex(prev => prev + 1);
         setIsAnimating(false);
       } else {
-        calculateAndSaveResult(newAnswers);
+        void calculateAndSaveResult(newAnswers);
       }
     }, 300); // Wait for fade out animation
   };
 
-  const calculateAndSaveResult = (finalAnswers: Record<string, number>) => {
+  const calculateAndSaveResult = async (finalAnswers: Record<string, number>) => {
     const getStyle = (typeA: string, typeB: string, titleA: string, titleB: string) => {
       const scoreA = finalAnswers[typeA];
       const scoreB = finalAnswers[typeB];
@@ -100,9 +108,10 @@ export function OnboardingFlow() {
     };
 
     setResultData(result);
+    setShowResult(true);
 
     // Update user context
-    saveLearningStyle({
+    const saved = await saveLearningStyle({
       processing: (
         processingStyle === "Mixed" ? "active" : processingStyle.toLowerCase()
       ) as LearningStyle["processing"],
@@ -116,7 +125,10 @@ export function OnboardingFlow() {
       ) as LearningStyle["understanding"],
     });
 
-    setShowResult(true);
+    if (!saved) {
+      setIsAnimating(false);
+      return;
+    }
 
     // Auto redirect to dashboard after showing results
     setTimeout(() => {
@@ -150,6 +162,11 @@ export function OnboardingFlow() {
           <p className="mt-10 text-center font-medium text-white/90 break-keep animate-pulse">
             당신에게 딱 맞는 학습을 준비하고 있어요...
           </p>
+          {saveError && (
+            <p className="mt-4 rounded-xl bg-white/20 px-4 py-3 text-center text-sm font-semibold text-white">
+              {saveError}
+            </p>
+          )}
         </div>
       </div>
     );
@@ -199,14 +216,16 @@ export function OnboardingFlow() {
             </button>
 
             <button
-              onClick={() => {
+              onClick={async () => {
                 // 건너뛰기 시 기본 임의 유형 부여
-                saveLearningStyle({
+                const saved = await saveLearningStyle({
                   processing: "active",
                   expression: "visual",
                   understanding: "global",
                 });
-                router.push("/dashboard");
+                if (saved) {
+                  router.push("/dashboard");
+                }
               }}
               className="text-gray-500 text-base font-medium underline underline-offset-2 hover:text-gray-700 transition-colors"
             >

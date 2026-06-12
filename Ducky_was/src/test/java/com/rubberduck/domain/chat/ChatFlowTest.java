@@ -38,7 +38,7 @@ class ChatFlowTest {
     }
 
     @Test
-    void chatConversationMessageHintAndEndFlow() throws Exception {
+    void chatConversationRequiresConfiguredAiResponseService() throws Exception {
         String accessToken = signupAndGetAccessToken();
 
         MvcResult startResult = mockMvc.perform(post("/api/chat/conversations")
@@ -60,14 +60,11 @@ class ChatFlowTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
                                 "conversation_id", Long.parseLong(conversationId),
-                                "message_text", "layout.tsx와 page.tsx 차이를 잘 모르겠어",
+                                "message_text", "layout.tsx와 page.tsx 차이를 모르겠어",
                                 "input_type", "text"
                         ))))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.conversationId").value(conversationId))
-                .andExpect(jsonPath("$.data.userMessage.role").value("user"))
-                .andExpect(jsonPath("$.data.aiResponse.role").value("assistant"))
-                .andExpect(jsonPath("$.data.aiResponse.type").value("question"));
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.success").value(false));
 
         mockMvc.perform(post("/api/chat/hints")
                         .header("Authorization", "Bearer " + accessToken)
@@ -75,30 +72,19 @@ class ChatFlowTest {
                         .content(objectMapper.writeValueAsString(Map.of(
                                 "conversation_id", Long.parseLong(conversationId)
                         ))))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.hintMessage.type").value("hint"))
-                .andExpect(jsonPath("$.data.hintMessage.hintLevel").value(1))
-                .andExpect(jsonPath("$.data.hintMessage.hintNumber").value(1));
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.success").value(false));
+
+        mockMvc.perform(patch("/api/chat/conversations/" + conversationId + "/end")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.success").value(false));
 
         mockMvc.perform(get("/api/chat/conversations/" + conversationId)
                         .header("Authorization", "Bearer " + accessToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.messageCount").value(3))
-                .andExpect(jsonPath("$.data.hintCount").value(1))
-                .andExpect(jsonPath("$.data.messages[0].role").value("user"))
-                .andExpect(jsonPath("$.data.messages[1].role").value("assistant"))
-                .andExpect(jsonPath("$.data.messages[2].type").value("hint"));
-
-        mockMvc.perform(patch("/api/chat/conversations/" + conversationId + "/end")
-                        .header("Authorization", "Bearer " + accessToken))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("completed"))
-                .andExpect(jsonPath("$.data.feedbackMessage.type").value("feedback"));
-
-        mockMvc.perform(get("/api/chat/conversations")
-                        .header("Authorization", "Bearer " + accessToken))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data[0].id").value(conversationId));
+                .andExpect(jsonPath("$.data.messageCount").value(0))
+                .andExpect(jsonPath("$.data.hintCount").value(0));
     }
 
     private String signupAndGetAccessToken() throws Exception {

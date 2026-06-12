@@ -22,6 +22,10 @@ interface AuthResponse {
   userInfo: BackendUser;
 }
 
+interface EmailAvailabilityResponse {
+  available: boolean;
+}
+
 interface LoginPayload {
   email: string;
   password: string;
@@ -85,6 +89,15 @@ export async function signup(payload: SignupPayload) {
   });
 
   return saveAuthResponse(authResponse);
+}
+
+export async function checkEmailAvailability(email: string) {
+  return apiRequest<EmailAvailabilityResponse>(
+    `/api/auth/email-available?email=${encodeURIComponent(email.trim().toLowerCase())}`,
+    {
+      method: "GET",
+    },
+  );
 }
 
 export async function getMe() {
