@@ -1,6 +1,7 @@
 package com.rubberduck.domain.auth;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -78,6 +79,21 @@ class AuthDeviceFlowTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id").value(userId))
                 .andExpect(jsonPath("$.data.loginId").value(loginId));
+
+        mockMvc.perform(patch("/api/users/me/learning-style")
+                        .header("Authorization", "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "processing", "reflective",
+                                "expression", "verbal",
+                                "understanding", "global",
+                                "onboarded", true
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.learningStyle.processing").value("reflective"))
+                .andExpect(jsonPath("$.data.learningStyle.expression").value("verbal"))
+                .andExpect(jsonPath("$.data.learningStyle.understanding").value("global"))
+                .andExpect(jsonPath("$.data.onboarded").value(true));
 
         MvcResult deviceResult = mockMvc.perform(post("/api/devices")
                         .contentType(MediaType.APPLICATION_JSON)

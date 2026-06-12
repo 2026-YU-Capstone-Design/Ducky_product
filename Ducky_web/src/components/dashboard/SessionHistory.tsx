@@ -2,10 +2,13 @@
 
 import { useMemo, useState } from "react";
 import {
+  AlertCircle,
   CalendarDays,
   CheckCircle2,
   Clock3,
+  Loader2,
   MessageCircle,
+  RefreshCw,
   Sparkles,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -19,7 +22,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { mockSessions } from "@/data/mockSessions";
+import { useSessionHistory } from "@/hooks/useSessionHistory";
 import type { ChatMessage } from "@/types/chat";
 import type { Session, SessionStatus } from "@/types/session";
 import { cn } from "@/lib/utils";
@@ -172,31 +175,25 @@ function SessionDetail({ session }: { session: Session }) {
 
 export function SessionHistory() {
   const [filter, setFilter] = useState<SessionFilter>("all");
-  const [selectedSession, setSelectedSession] = useState<Session | null>(null);
-
-  const sortedSessions = useMemo(
-    () =>
-      [...mockSessions].sort(
-        (a, b) =>
-          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-      ),
-    [],
-  );
+  const {
+    counts,
+    error,
+    isLoading,
+    isLoadingDetail,
+    retry,
+    selectSession,
+    selectedSession,
+    sessions,
+    setSelectedSession,
+  } = useSessionHistory();
 
   const filteredSessions = useMemo(
     () =>
       filter === "all"
-        ? sortedSessions
-        : sortedSessions.filter((session) => session.status === filter),
-    [filter, sortedSessions],
+        ? sessions
+        : sessions.filter((session) => session.status === filter),
+    [filter, sessions],
   );
-
-  const completedCount = sortedSessions.filter(
-    (session) => session.status === "completed",
-  ).length;
-  const inProgressCount = sortedSessions.filter(
-    (session) => session.status === "in_progress",
-  ).length;
 
   return (
     <section className="mx-auto flex w-full max-w-7xl flex-1 flex-col px-5 py-8 sm:px-8 lg:px-10">
@@ -217,19 +214,19 @@ export function SessionHistory() {
             <div className="rounded-lg border border-[#E7DDC8] bg-white px-4 py-3 dark:border-white/10 dark:bg-[#24211D]">
               <p className="text-xs text-gray-500 dark:text-gray-400">전체</p>
               <p className="mt-1 text-xl font-bold text-gray-950 dark:text-white">
-                {sortedSessions.length}
+                {counts.total}
               </p>
             </div>
             <div className="rounded-lg border border-[#E7DDC8] bg-white px-4 py-3 dark:border-white/10 dark:bg-[#24211D]">
               <p className="text-xs text-gray-500 dark:text-gray-400">진행</p>
               <p className="mt-1 text-xl font-bold text-gray-950 dark:text-white">
-                {inProgressCount}
+                {counts.inProgress}
               </p>
             </div>
             <div className="rounded-lg border border-[#E7DDC8] bg-white px-4 py-3 dark:border-white/10 dark:bg-[#24211D]">
               <p className="text-xs text-gray-500 dark:text-gray-400">완료</p>
               <p className="mt-1 text-xl font-bold text-gray-950 dark:text-white">
-                {completedCount}
+                {counts.completed}
               </p>
             </div>
           </div>
@@ -268,18 +265,45 @@ export function SessionHistory() {
         </div>
       </div>
 
+      {(isLoading || error) && (
+        <div className="mt-5 rounded-lg border border-[#E7DDC8] bg-white px-4 py-3 text-sm text-gray-600 shadow-sm dark:border-white/10 dark:bg-[#24211D] dark:text-gray-300">
+          {isLoading ? (
+            <span className="inline-flex items-center gap-2">
+              <Loader2 className="size-4 animate-spin text-[#B88700]" />
+              세션 기록을 불러오는 중입니다.
+            </span>
+          ) : (
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <span className="inline-flex min-w-0 items-start gap-2 text-red-600 dark:text-red-200">
+                <AlertCircle className="mt-0.5 size-4 shrink-0" />
+                <span className="break-keep">{error}</span>
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 shrink-0 gap-2"
+                onClick={() => void retry()}
+              >
+                <RefreshCw className="size-4" />
+                다시 시도
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="mt-5 grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
         {filteredSessions.map((session) => (
           <SessionCard
             key={session.id}
             isSelected={selectedSession?.id === session.id}
-            onSelect={setSelectedSession}
+            onSelect={(nextSession) => void selectSession(nextSession)}
             session={session}
           />
         ))}
       </div>
 
-      {filteredSessions.length === 0 && (
+      {!isLoading && filteredSessions.length === 0 && (
         <div className="mt-5 rounded-lg border border-dashed border-[#E7DDC8] bg-white px-5 py-10 text-center dark:border-white/10 dark:bg-[#24211D]">
           <p className="font-bold text-gray-950 dark:text-white">
             표시할 세션이 없습니다
@@ -330,7 +354,14 @@ export function SessionHistory() {
                 </DialogDescription>
               </DialogHeader>
 
-              <SessionDetail session={selectedSession} />
+              {isLoadingDetail ? (
+                <div className="flex min-h-[24rem] flex-1 items-center justify-center gap-2 p-8 text-sm text-gray-500 dark:text-gray-400">
+                  <Loader2 className="size-4 animate-spin text-[#B88700]" />
+                  대화 내역을 불러오는 중입니다.
+                </div>
+              ) : (
+                <SessionDetail session={selectedSession} />
+              )}
             </>
           )}
         </DialogContent>

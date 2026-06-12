@@ -1,13 +1,19 @@
+"use client";
+
 import Link from "next/link";
 import {
   ArrowRight,
+  AlertCircle,
   Flame,
+  Loader2,
   MessageCircle,
+  RefreshCw,
   Target,
   Trophy,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { mockAnalysis, mockSessions, mockUser } from "@/data/mockData";
+import { useDashboardData } from "@/hooks/useDashboardData";
 import type { LearningLevel, LearningStyle } from "@/types/user";
 import type { Session } from "@/types/session";
 
@@ -33,59 +39,6 @@ const styleLabels: {
     global: "전체 구조형",
   },
 };
-
-const styleRows = [
-  {
-    label: "처리 방식",
-    value: styleLabels.processing[mockUser.learningStyle.processing],
-  },
-  {
-    label: "표현 선호",
-    value: styleLabels.expression[mockUser.learningStyle.expression],
-  },
-  {
-    label: "이해 구조",
-    value: styleLabels.understanding[mockUser.learningStyle.understanding],
-  },
-];
-
-const recentSessions = [...mockSessions]
-  .sort(
-    (a, b) =>
-      new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-  )
-  .slice(0, 2);
-
-const activeSession =
-  recentSessions.find((session) => session.status === "in_progress") ??
-  recentSessions[0];
-
-const statCards = [
-  {
-    label: "연속 학습",
-    value: `${mockAnalysis.currentStreakDays}일`,
-    icon: Flame,
-    tone: "text-[#B88700]",
-  },
-  {
-    label: "완료 세션",
-    value: `${mockAnalysis.completedSessions}개`,
-    icon: Trophy,
-    tone: "text-[#B88700]",
-  },
-  {
-    label: "평균 힌트",
-    value: `${mockAnalysis.averageHintCount}회`,
-    icon: MessageCircle,
-    tone: "text-[#B88700]",
-  },
-  {
-    label: "현재 레벨",
-    value: levelLabels[mockUser.level],
-    icon: Target,
-    tone: "text-[#B88700]",
-  },
-];
 
 function statusLabel(status: Session["status"]) {
   return status === "completed" ? "완료" : "진행 중";
@@ -152,13 +105,63 @@ function SessionCard({ session }: { session: Session }) {
 }
 
 export function HomeDashboard() {
+  const { error, isLoading, recentSessions, retry, sessions, summary, user } =
+    useDashboardData();
+  const activeSession =
+    recentSessions.find((session) => session.status === "in_progress") ??
+    recentSessions[0];
+
+  const styleRows = user
+    ? [
+        {
+          label: "처리 방식",
+          value: styleLabels.processing[user.learningStyle.processing],
+        },
+        {
+          label: "표현 선호",
+          value: styleLabels.expression[user.learningStyle.expression],
+        },
+        {
+          label: "이해 구조",
+          value: styleLabels.understanding[user.learningStyle.understanding],
+        },
+      ]
+    : [];
+
+  const statCards = [
+    {
+      label: "연속 학습",
+      value: `${summary.currentStreakDays}일`,
+      icon: Flame,
+      tone: "text-[#B88700]",
+    },
+    {
+      label: "완료 세션",
+      value: `${summary.completedSessions}개`,
+      icon: Trophy,
+      tone: "text-[#B88700]",
+    },
+    {
+      label: "평균 힌트",
+      value: `${summary.averageHintCount}회`,
+      icon: MessageCircle,
+      tone: "text-[#B88700]",
+    },
+    {
+      label: "현재 레벨",
+      value: user ? levelLabels[user.level] : "-",
+      icon: Target,
+      tone: "text-[#B88700]",
+    },
+  ];
+
   return (
     <section className="mx-auto flex w-full max-w-7xl flex-1 flex-col px-5 py-8 sm:px-8 lg:px-10">
       <div className="flex flex-col gap-6 border-b border-[#E7DDC8] pb-8 dark:border-white/10 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-[#B88700]">오늘의 학습</p>
           <h1 className="mt-3 max-w-3xl text-3xl font-bold leading-tight tracking-tight text-gray-950 break-keep dark:text-white sm:text-4xl">
-            {mockUser.name}님, 이어서 설명해볼까요?
+            {user?.name ?? "Ducky"}님, 이어서 설명해볼까요?
           </h1>
           <p className="mt-4 max-w-3xl text-base leading-relaxed text-gray-600 break-keep dark:text-gray-300">
             최근 질문 흐름을 바탕으로 Ducky가 답을 바로 주기보다 생각을
@@ -174,6 +177,33 @@ export function HomeDashboard() {
           <ArrowRight className="size-4" aria-hidden="true" />
         </Link>
       </div>
+
+      {(isLoading || error) && (
+        <div className="mt-6 rounded-lg border border-[#E7DDC8] bg-white px-4 py-3 text-sm text-gray-600 shadow-sm dark:border-white/10 dark:bg-[#24211D] dark:text-gray-300">
+          {isLoading ? (
+            <span className="inline-flex items-center gap-2">
+              <Loader2 className="size-4 animate-spin text-[#B88700]" />
+              대시보드 데이터를 불러오는 중입니다.
+            </span>
+          ) : (
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <span className="inline-flex min-w-0 items-start gap-2 text-red-600 dark:text-red-200">
+                <AlertCircle className="mt-0.5 size-4 shrink-0" />
+                <span className="break-keep">{error}</span>
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 shrink-0 gap-2"
+                onClick={() => void retry()}
+              >
+                <RefreshCw className="size-4" />
+                다시 시도
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {statCards.map((stat) => {
@@ -219,6 +249,17 @@ export function HomeDashboard() {
               <SessionCard key={session.id} session={session} />
             ))}
           </div>
+
+          {!isLoading && !error && sessions.length === 0 && (
+            <div className="rounded-lg border border-dashed border-[#E7DDC8] bg-white px-5 py-10 text-center dark:border-white/10 dark:bg-[#24211D]">
+              <p className="font-bold text-gray-950 dark:text-white">
+                아직 학습 세션이 없습니다
+              </p>
+              <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                새 대화를 시작하면 이곳에 최근 기록이 표시됩니다.
+              </p>
+            </div>
+          )}
         </div>
 
         <Card className="rounded-lg border border-[#E7DDC8] bg-white py-0 shadow-sm transition-colors dark:border-white/10 dark:bg-[#24211D] dark:shadow-none">

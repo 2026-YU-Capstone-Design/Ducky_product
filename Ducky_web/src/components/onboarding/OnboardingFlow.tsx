@@ -6,7 +6,8 @@ import { onboardingQuestions } from "@/data/onboardingQuestions";
 import { QuestionCard } from "./QuestionCard";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { Comfortaa } from "next/font/google";
-import { defaultUser, USER_STORAGE_KEY } from "@/lib/auth/storage";
+import { updateLearningStyle } from "@/lib/api/auth";
+import { defaultUser, persistUser, USER_STORAGE_KEY } from "@/lib/auth/storage";
 import type { LearningStyle } from "@/types/user";
 
 const comfortaa = Comfortaa({
@@ -38,6 +39,24 @@ export function OnboardingFlow() {
   const [resultData, setResultData] = useState<LearningStyleResult | null>(null);
 
   const [user, setUser] = useLocalStorage(USER_STORAGE_KEY, defaultUser);
+
+  const saveLearningStyle = (learningStyle: LearningStyle) => {
+    const nextUser = {
+      ...user,
+      learningStyle,
+      onboarded: true,
+    };
+
+    setUser(nextUser);
+    void updateLearningStyle({
+      ...learningStyle,
+      onboarded: true,
+    })
+      .then(persistUser)
+      .catch((error) => {
+        console.error("Learning style save failed", error);
+      });
+  };
 
   const handleSelect = (axis: string, value: string) => {
     if (isAnimating) return;
@@ -83,25 +102,19 @@ export function OnboardingFlow() {
     setResultData(result);
 
     // Update user context
-    if (user) {
-      setUser({
-        ...user,
-        learningStyle: {
-          processing: (
-            processingStyle === "Mixed" ? "active" : processingStyle.toLowerCase()
-          ) as LearningStyle["processing"],
-          expression: (
-            representationStyle === "Mixed"
-              ? "visual"
-              : representationStyle.toLowerCase()
-          ) as LearningStyle["expression"],
-          understanding: (
-            structureStyle === "Mixed" ? "sequential" : structureStyle.toLowerCase()
-          ) as LearningStyle["understanding"]
-        },
-        onboarded: true
-      });
-    }
+    saveLearningStyle({
+      processing: (
+        processingStyle === "Mixed" ? "active" : processingStyle.toLowerCase()
+      ) as LearningStyle["processing"],
+      expression: (
+        representationStyle === "Mixed"
+          ? "visual"
+          : representationStyle.toLowerCase()
+      ) as LearningStyle["expression"],
+      understanding: (
+        structureStyle === "Mixed" ? "sequential" : structureStyle.toLowerCase()
+      ) as LearningStyle["understanding"],
+    });
 
     setShowResult(true);
 
@@ -188,17 +201,11 @@ export function OnboardingFlow() {
             <button
               onClick={() => {
                 // 건너뛰기 시 기본 임의 유형 부여
-                if (user) {
-                  setUser({
-                    ...user,
-                    learningStyle: {
-                      processing: "active",
-                      expression: "visual",
-                      understanding: "global"
-                    },
-                    onboarded: true
-                  });
-                }
+                saveLearningStyle({
+                  processing: "active",
+                  expression: "visual",
+                  understanding: "global",
+                });
                 router.push("/dashboard");
               }}
               className="text-gray-500 text-base font-medium underline underline-offset-2 hover:text-gray-700 transition-colors"

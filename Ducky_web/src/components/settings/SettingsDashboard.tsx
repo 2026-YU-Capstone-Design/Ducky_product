@@ -1,19 +1,25 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ArrowRight,
+  AlertCircle,
   Bell,
   Brain,
+  Loader2,
   Moon,
+  RefreshCw,
   UserRound,
   type LucideIcon,
 } from "lucide-react";
 import { MaterialLibraryMock } from "@/components/settings/MaterialLibraryMock";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
-import { mockUser } from "@/data/mockUser";
+import { getMe } from "@/lib/api/auth";
+import { getAccessToken } from "@/lib/api/client";
+import { defaultUser, persistUser } from "@/lib/auth/storage";
 import type { LearningLevel, LearningStyle } from "@/types/user";
 
 const levelLabels: Record<LearningLevel, string> = {
@@ -86,25 +92,61 @@ function SectionTitle({
 export function SettingsDashboard() {
   const [darkMode, setDarkMode] = useState(getInitialDarkMode);
   const [studyReminder, setStudyReminder] = useState(true);
+  const [user, setUser] = useState(defaultUser);
+  const [isLoadingUser, setIsLoadingUser] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", darkMode);
     window.localStorage.setItem(DARK_MODE_STORAGE_KEY, String(darkMode));
   }, [darkMode]);
 
+  const loadUser = useCallback(async () => {
+    if (!getAccessToken()) {
+      setError("로그인 후 사용자 정보를 확인할 수 있습니다.");
+      setIsLoadingUser(false);
+      return;
+    }
+
+    setIsLoadingUser(true);
+    setError(null);
+
+    try {
+      const nextUser = await getMe();
+      setUser(nextUser);
+      persistUser(nextUser);
+    } catch (loadError) {
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : "사용자 정보를 불러오지 못했습니다.",
+      );
+    } finally {
+      setIsLoadingUser(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void loadUser();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [loadUser]);
+
   const learningStyleRows = [
     {
       label: "처리 방식",
-      value: learningStyleLabels.processing[mockUser.learningStyle.processing],
+      value: learningStyleLabels.processing[user.learningStyle.processing],
     },
     {
       label: "표현 선호",
-      value: learningStyleLabels.expression[mockUser.learningStyle.expression],
+      value: learningStyleLabels.expression[user.learningStyle.expression],
     },
     {
       label: "이해 구조",
       value:
-        learningStyleLabels.understanding[mockUser.learningStyle.understanding],
+        learningStyleLabels.understanding[user.learningStyle.understanding],
     },
   ];
 
@@ -116,10 +158,36 @@ export function SettingsDashboard() {
           학습 환경을 조정합니다
         </h1>
         <p className="mt-4 text-base leading-relaxed text-gray-600 break-keep dark:text-gray-300">
-          현재는 프로토타입용 mock 설정입니다. 실제 저장은 이후 백엔드 연결
-          단계에서 처리합니다.
+          로그인된 사용자 정보와 학습 성향을 백엔드 기준으로 표시합니다.
         </p>
       </div>
+
+      {(isLoadingUser || error) && (
+        <div className="mt-6 rounded-lg border border-[#E7DDC8] bg-white px-4 py-3 text-sm text-gray-600 shadow-sm dark:border-white/10 dark:bg-[#24211D] dark:text-gray-300">
+          {isLoadingUser ? (
+            <span className="inline-flex items-center gap-2">
+              <Loader2 className="size-4 animate-spin text-[#B88700]" />
+              사용자 정보를 불러오는 중입니다.
+            </span>
+          ) : (
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <span className="inline-flex min-w-0 items-start gap-2 text-red-600 dark:text-red-200">
+                <AlertCircle className="mt-0.5 size-4 shrink-0" />
+                <span className="break-keep">{error}</span>
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 shrink-0 gap-2"
+                onClick={() => void loadUser()}
+              >
+                <RefreshCw className="size-4" />
+                다시 시도
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="mt-8 grid gap-4 lg:grid-cols-2">
         <Card className="min-h-[196px] rounded-lg border border-[#E7DDC8] bg-white py-0 shadow-sm transition-colors dark:border-white/10 dark:bg-[#24211D] dark:shadow-none">
@@ -127,9 +195,9 @@ export function SettingsDashboard() {
             <SectionTitle icon={UserRound}>프로필</SectionTitle>
 
             <dl className="mt-4">
-              <ProfileRow label="이름" value={mockUser.name} />
-              <ProfileRow label="이메일" value={mockUser.email} />
-              <ProfileRow label="레벨" value={levelLabels[mockUser.level]} />
+              <ProfileRow label="이름" value={user.name || "-"} />
+              <ProfileRow label="이메일" value={user.email || "-"} />
+              <ProfileRow label="레벨" value={levelLabels[user.level]} />
             </dl>
           </CardContent>
         </Card>

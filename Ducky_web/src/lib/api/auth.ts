@@ -33,6 +33,13 @@ interface SignupPayload {
   password: string;
 }
 
+export interface UpdateLearningStylePayload {
+  processing: User["learningStyle"]["processing"];
+  expression: User["learningStyle"]["expression"];
+  understanding: User["learningStyle"]["understanding"];
+  onboarded?: boolean;
+}
+
 function asUser(user: BackendUser): User {
   return {
     id: user.id,
@@ -84,6 +91,16 @@ export async function getMe() {
   const user = await apiRequest<BackendUser>("/api/users/me", {
     method: "GET",
     auth: true,
+  });
+
+  return asUser(user);
+}
+
+export async function updateLearningStyle(payload: UpdateLearningStylePayload) {
+  const user = await apiRequest<BackendUser>("/api/users/me/learning-style", {
+    method: "PATCH",
+    auth: true,
+    body: payload,
   });
 
   return asUser(user);
