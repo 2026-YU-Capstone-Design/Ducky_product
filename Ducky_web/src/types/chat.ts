@@ -25,3 +25,26 @@ export interface ChatMessage {
   hintNumber?: number;
   attachments?: ChatAttachment[];
 }
+
+export type SessionProgressStatus = "learning" | "completed";
+
+export interface HintRecord {
+  id: string;
+  number: number;
+  depth: 1 | 2 | 3;
+  title: string;
+  content: string;
+}
+
+export interface ChatSessionSummary {
+  id: string;
+  title: string;
+  topic: string;
+  status: string;
+  summary?: string | null;
+  hintCount?: number;
+  messageCount?: number;
+  startedAt?: string | null;
+  updatedAt?: string | null;
+  completedAt?: string | null;
+}

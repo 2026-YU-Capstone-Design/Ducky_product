@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Bot, Lightbulb } from "lucide-react";
+import { AlertCircle, Bot, Lightbulb, Loader2, RefreshCw } from "lucide-react";
 import { Comfortaa } from "next/font/google";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -12,6 +12,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { useChatSession } from "@/hooks/useChatSession";
 import { useMockChat } from "@/hooks/useMockChat";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
 import { ChatBubble } from "./ChatBubble";
@@ -23,22 +24,39 @@ const comfortaa = Comfortaa({
   weight: ["700"],
 });
 
+const useMockChatFallback = process.env.NEXT_PUBLIC_USE_MOCK_CHAT === "true";
+
 export function ChatPage() {
   const [draft, setDraft] = useState("");
   const [isHintOpen, setIsHintOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const apiChat = useChatSession({ enabled: !useMockChatFallback });
+  const mockChat = useMockChat();
+  const chat = useMockChatFallback
+    ? {
+        ...mockChat,
+        error: null,
+        isLoadingSession: false,
+        isReady: true,
+        retry: () => undefined,
+      }
+    : apiChat;
   const {
     activeSession,
     completeSession,
+    error,
     hintCount,
     hintHistory,
     isCompleted,
+    isLoadingSession,
+    isReady,
     isThinking,
     messages,
     requestHint,
+    retry,
     sendMessage,
     stageIndex,
-  } = useMockChat();
+  } = chat;
 
   const handleTranscript = useCallback((text: string) => {
     setDraft((current) => (current.trim() ? `${current}\n${text}` : text));
@@ -109,6 +127,32 @@ export function ChatPage() {
                 </p>
               </div>
 
+              {isLoadingSession && (
+                <div className="mx-auto flex max-w-3xl items-center gap-3 rounded-lg border border-[#E7DDC8] bg-white px-4 py-3 text-sm text-gray-600 shadow-sm transition-colors dark:border-white/10 dark:bg-[#24211D] dark:text-gray-300 dark:shadow-none">
+                  <Loader2 className="size-4 shrink-0 animate-spin text-[#B88700]" />
+                  채팅 세션을 불러오는 중입니다.
+                </div>
+              )}
+
+              {error && (
+                <div className="mx-auto flex max-w-3xl flex-col gap-3 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700 sm:flex-row sm:items-center sm:justify-between dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-200">
+                  <div className="flex min-w-0 items-start gap-2">
+                    <AlertCircle className="mt-0.5 size-4 shrink-0" />
+                    <p className="min-w-0 break-keep">{error}</p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-9 shrink-0 gap-2 border-red-200 bg-white text-red-700 hover:bg-red-100 dark:border-red-500/30 dark:bg-transparent dark:text-red-200 dark:hover:bg-red-500/10"
+                    disabled={isLoadingSession}
+                    onClick={() => void retry()}
+                  >
+                    <RefreshCw className="size-4" />
+                    다시 시도
+                  </Button>
+                </div>
+              )}
+
               {messages.map((message) => (
                 <ChatBubble key={message.id} message={message} />
               ))}
@@ -132,7 +176,7 @@ export function ChatPage() {
           </ScrollArea>
 
           <ChatInput
-            disabled={isThinking || isCompleted}
+            disabled={isThinking || isCompleted || isLoadingSession || !isReady}
             onChange={setDraft}
             onSend={sendMessage}
             onVoiceCancel={voice.cancel}

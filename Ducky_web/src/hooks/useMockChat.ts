@@ -2,17 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { mockSessions } from "@/data/mockSessions";
-import type { ChatAttachment, ChatMessage } from "@/types/chat";
-
-export type SessionProgressStatus = "learning" | "completed";
-
-export interface HintRecord {
-  id: string;
-  number: number;
-  depth: 1 | 2 | 3;
-  title: string;
-  content: string;
-}
+import type {
+  ChatAttachment,
+  ChatMessage,
+  HintRecord,
+  SessionProgressStatus,
+} from "@/types/chat";
 
 const activeMockSession =
   mockSessions.find((session) => session.status === "in_progress") ??

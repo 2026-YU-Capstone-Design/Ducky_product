@@ -3,8 +3,8 @@
 import { Check, Lightbulb, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { HintRecord } from "@/hooks/useMockChat";
 import { cn } from "@/lib/utils";
+import type { HintRecord } from "@/types/chat";
 
 const learningStages = [
   "문제 말하기",
