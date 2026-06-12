@@ -53,7 +53,7 @@ nano .env
 필수 값:
 
 ```env
-OPENAI_API_KEY=sk-your-openai-api-key
+OPENAI_API_KEY=your-openai-api-key
 SERVER_BASE_URL=http://서버주소:8080
 ```
 

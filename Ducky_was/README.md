@@ -12,7 +12,7 @@
 
 ### 1. PostgreSQL 설치 및 설정
 ```sql
-CREATE USER rubberduck WITH PASSWORD '0604';
+CREATE USER rubberduck WITH PASSWORD 'your-local-db-password';
 CREATE DATABASE rubberduck OWNER rubberduck;
 GRANT ALL PRIVILEGES ON DATABASE rubberduck TO rubberduck;
 ```
