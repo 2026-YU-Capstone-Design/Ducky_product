@@ -17,6 +17,7 @@ import com.rubberduck.domain.chat.repository.ChatMessageRepository;
 import com.rubberduck.domain.chat.repository.ConversationRepository;
 import com.rubberduck.domain.device.entity.Device;
 import com.rubberduck.domain.device.service.DeviceService;
+import com.rubberduck.domain.document.service.DocumentService;
 import com.rubberduck.domain.user.entity.User;
 import com.rubberduck.domain.user.service.UserService;
 import com.rubberduck.global.exception.CustomException;
@@ -33,6 +34,7 @@ public class ChatService {
     private final DeviceService deviceService;
     private final UserService userService;
     private final FallbackChatResponseService fallbackChatResponseService;
+    private final DocumentService documentService;
 
     @Transactional
     public ConversationSummaryResponse startConversation(
@@ -87,7 +89,7 @@ public class ChatService {
             user = userService.findOrCreateExternalUser(externalUserId);
             conversation = conversationRepository.findFirstByUserAndStatusOrderByUpdatedAtDesc(user, "in_progress")
                     .orElseGet(() -> conversationRepository.save(
-                            Conversation.start(user, device, null, "Raspberry voice session", "음성 러버덕 질문 훈련")
+                            Conversation.start(user, device, null, "Raspberry voice session", "음성 러버덕 질문 연결")
                     ));
         }
 
@@ -128,7 +130,6 @@ public class ChatService {
     }
 
     private ChatTurnResponse appendUserTurn(User user, Conversation conversation, String messageText, String inputType) {
-
         String normalizedText = requireText(messageText);
         boolean completion = isCompletionText(normalizedText);
         int userSequence = conversation.getMessageCount() + 1;
@@ -146,12 +147,16 @@ public class ChatService {
         }
         conversation.increaseMessageCount();
 
+        String documentContext = completion
+                ? ""
+                : documentService.toPromptContext(documentService.searchResults(user, normalizedText, 3));
+
         ChatMessage aiMessage = ChatMessage.create(
                 conversation,
                 "assistant",
                 completion
                         ? fallbackChatResponseService.generateCompletionFeedback()
-                        : fallbackChatResponseService.generateQuestion(normalizedText, user),
+                        : fallbackChatResponseService.generateQuestion(normalizedText, user, documentContext),
                 completion ? "feedback" : "question",
                 "system",
                 userSequence + 1
@@ -280,9 +285,10 @@ public class ChatService {
 
     private boolean isCompletionText(String text) {
         String normalized = text.replaceAll("\\s+", "");
-        return normalized.contains("답을알")
-                || normalized.contains("이해했")
-                || normalized.contains("이해됐")
-                || normalized.contains("풀수있");
+        return normalized.contains("됐어")
+                || normalized.contains("이해했어")
+                || normalized.contains("알겠어")
+                || normalized.contains("끝낼게")
+                || normalized.contains("완료");
     }
 }

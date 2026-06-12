@@ -13,7 +13,7 @@ import {
   UserRound,
   type LucideIcon,
 } from "lucide-react";
-import { MaterialLibraryMock } from "@/components/settings/MaterialLibraryMock";
+import { MaterialLibrary } from "@/components/settings/MaterialLibrary";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -288,7 +288,7 @@ export function SettingsDashboard() {
           </CardContent>
         </Card>
 
-        <MaterialLibraryMock />
+        <MaterialLibrary />
       </div>
     </section>
   );
