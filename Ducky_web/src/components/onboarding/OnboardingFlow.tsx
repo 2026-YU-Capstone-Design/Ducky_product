@@ -6,6 +6,8 @@ import { onboardingQuestions } from "@/data/onboardingQuestions";
 import { QuestionCard } from "./QuestionCard";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { Comfortaa } from "next/font/google";
+import { defaultUser, USER_STORAGE_KEY } from "@/lib/auth/storage";
+import type { LearningStyle } from "@/types/user";
 
 const comfortaa = Comfortaa({
   subsets: ["latin"],
@@ -35,17 +37,7 @@ export function OnboardingFlow() {
   const [showResult, setShowResult] = useState(false);
   const [resultData, setResultData] = useState<LearningStyleResult | null>(null);
 
-  const [user, setUser] = useLocalStorage("ducky_user", {
-    id: "",
-    name: "",
-    level: "beginner",
-    learningStyle: {
-      processing: "active",
-      expression: "visual",
-      understanding: "sequential"
-    },
-    onboarded: false
-  });
+  const [user, setUser] = useLocalStorage(USER_STORAGE_KEY, defaultUser);
 
   const handleSelect = (axis: string, value: string) => {
     if (isAnimating) return;
@@ -95,9 +87,17 @@ export function OnboardingFlow() {
       setUser({
         ...user,
         learningStyle: {
-          processing: processingStyle === "Mixed" ? "active" : processingStyle.toLowerCase(),
-          expression: representationStyle === "Mixed" ? "visual" : representationStyle.toLowerCase(),
-          understanding: structureStyle === "Mixed" ? "sequential" : structureStyle.toLowerCase()
+          processing: (
+            processingStyle === "Mixed" ? "active" : processingStyle.toLowerCase()
+          ) as LearningStyle["processing"],
+          expression: (
+            representationStyle === "Mixed"
+              ? "visual"
+              : representationStyle.toLowerCase()
+          ) as LearningStyle["expression"],
+          understanding: (
+            structureStyle === "Mixed" ? "sequential" : structureStyle.toLowerCase()
+          ) as LearningStyle["understanding"]
         },
         onboarded: true
       });

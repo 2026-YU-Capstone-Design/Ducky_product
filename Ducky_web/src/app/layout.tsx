@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
+import { AuthBootstrap } from "@/components/auth/AuthBootstrap";
 import { ServiceWorkerRegistration } from "@/components/pwa/ServiceWorkerRegistration";
 import "./globals.css";
 
@@ -59,6 +60,7 @@ export default function RootLayout({
         <Script id="ducky-theme-init" strategy="beforeInteractive">
           {themeInitScript}
         </Script>
+        <AuthBootstrap />
         <ServiceWorkerRegistration />
         {children}
       </body>

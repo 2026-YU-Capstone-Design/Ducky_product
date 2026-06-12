@@ -4,18 +4,30 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { Comfortaa } from "next/font/google";
+import { login, signup } from "@/lib/api/auth";
+import { ApiError } from "@/lib/api/client";
+import { defaultUser, USER_STORAGE_KEY } from "@/lib/auth/storage";
 
-const comfortaa = Comfortaa({
-  subsets: ["latin"],
-  weight: ["700"],
-  variable: "--font-comfortaa",
-});
 import { SignupStep1 } from "@/components/auth/SignupStep1";
 import { SignupStep2 } from "@/components/auth/SignupStep2";
 import { SignupStep3 } from "@/components/auth/SignupStep3";
 import { TermsModal } from "@/components/auth/TermsModal";
 import { LoginOptions } from "@/components/auth/LoginOptions";
 import { EmailLogin } from "@/components/auth/EmailLogin";
+
+const comfortaa = Comfortaa({
+  subsets: ["latin"],
+  weight: ["700"],
+  variable: "--font-comfortaa",
+});
+
+function getAuthErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof ApiError && error.message) {
+    return error.message;
+  }
+
+  return fallback;
+}
 
 /**
  * 랜딩 페이지 컴포넌트
@@ -32,17 +44,7 @@ export default function LandingPage() {
   const [error, setError] = useState("");
 
   // 사용자 로그인 상태 및 정보 영구 저장
-  const [, setUser] = useLocalStorage("ducky_user", {
-    id: "",
-    name: "",
-    level: "beginner" as "beginner" | "intermediate" | "advanced",
-    learningStyle: {
-      processing: "active" as "active" | "reflective",
-      expression: "visual" as "visual" | "verbal",
-      understanding: "sequential" as "sequential" | "global"
-    },
-    onboarded: false
-  });
+  const [, setUser] = useLocalStorage(USER_STORAGE_KEY, defaultUser);
 
   // 회원가입 상태 관리
   const [name, setName] = useState("");
@@ -86,21 +88,13 @@ export default function LandingPage() {
   }, [phase]);
 
   const handleSocialLogin = (platform: "kakao" | "naver") => {
-    setIsLoading(true);
-    setError("");
-    // API 로그인 시뮬레이션
-    setTimeout(() => {
-      setIsLoading(false);
-      setUser(prev => ({
-        ...prev,
-        id: `mock-${platform}-user`,
-        name: platform === "kakao" ? "카카오 유저" : "네이버 유저",
-      }));
-      router.push("/dashboard");
-    }, 1500);
+    setEmailMode("login");
+    setError(
+      `${platform === "kakao" ? "Kakao" : "Naver"} login is not connected yet. Please use email login.`,
+    );
   };
 
-  const handleEmailLoginSubmit = (e: React.FormEvent) => {
+  const handleEmailLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) {
       setError("이메일과 비밀번호를 모두 입력해 주세요.");
@@ -108,32 +102,48 @@ export default function LandingPage() {
     }
     setIsLoading(true);
     setError("");
-    
-    // 이메일 로그인 시뮬레이션
-    setTimeout(() => {
-      setIsLoading(false);
-      setUser(prev => ({
-        ...prev,
-        id: "mock-email-user",
-        name: email.split("@")[0],
-      }));
+
+    try {
+      const user = await login({
+        email,
+        password,
+      });
+      setUser(user);
       router.push("/dashboard");
-    }, 1500);
+    } catch (authError) {
+      setError(
+        getAuthErrorMessage(
+          authError,
+          "Login failed. Please check your email and password.",
+        ),
+      );
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleSignupSubmit = () => {
+  const handleSignupSubmit = async () => {
     setIsLoading(true);
-    // 회원가입 시뮬레이션
-    setTimeout(() => {
+    setError("");
+
+    try {
+      const user = await signup({
+        name,
+        email,
+        password,
+      });
+      setUser(user);
+      router.push("/dashboard");
+    } catch (authError) {
+      setError(
+        getAuthErrorMessage(
+          authError,
+          "Signup failed. Please check your information and try again.",
+        ),
+      );
+    } finally {
       setIsLoading(false);
-      setUser(prev => ({
-        ...prev,
-        id: "mock-email-user",
-        name: name,
-        onboarded: false
-      }));
-      router.push("/onboarding");
-    }, 1500);
+    }
   };
 
   // 회원가입 - 이메일 입력 핸들러
@@ -158,14 +168,9 @@ export default function LandingPage() {
     
     setTimeout(() => {
       setIsCheckingEmail(false);
-      if (email === "exist@ducky.com" || email === "test@test.com") {
-        setEmailError("이미 존재하는 이메일입니다.");
-        setIsEmailChecked(false);
-      } else {
-        setEmailSuccess("중복 확인이 완료되었습니다.");
-        setIsEmailChecked(true);
-      }
-    }, 800);
+      setEmailSuccess("이메일 형식이 확인되었습니다. 중복 여부는 가입 시 서버에서 확인합니다.");
+      setIsEmailChecked(true);
+    }, 300);
   };
 
   // 회원가입 - 비밀번호 입력 핸들러
@@ -277,6 +282,11 @@ export default function LandingPage() {
         {/* 3단계 회원가입 위저드 */}
         {emailMode === "signup" && (
           <>
+            {error && (
+              <div className="mb-4 w-full rounded-xl border border-red-100 bg-red-50 p-3.5 text-sm font-semibold text-red-600">
+                {error}
+              </div>
+            )}
             {signupStep === 1 && (
               <SignupStep1
                 name={name}
