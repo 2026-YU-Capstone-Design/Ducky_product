@@ -1,0 +1,14 @@
+from enum import Enum
+
+
+class LedState(str, Enum):
+    BOOTING = "BOOTING"
+    IDLE = "IDLE"
+    RECORDING = "RECORDING"
+    TRANSCRIBING = "TRANSCRIBING"
+    THINKING = "THINKING"
+    SPEAKING = "SPEAKING"
+    LOGGING = "LOGGING"
+    FALLBACK = "FALLBACK"
+    ERROR = "ERROR"
+    STOPPED = "STOPPED"

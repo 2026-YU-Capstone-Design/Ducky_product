@@ -40,31 +40,41 @@ def _get_bool(name: str, default: bool) -> bool:
     return raw_value.strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
-OPENAI_STT_MODEL = os.getenv("OPENAI_STT_MODEL", "gpt-4o-transcribe").strip()
-OPENAI_TTS_MODEL = os.getenv("OPENAI_TTS_MODEL", "gpt-4o-mini-tts").strip()
-OPENAI_TTS_VOICE = os.getenv("OPENAI_TTS_VOICE", "marin").strip()
+def _get_str(name: str, default: str = "") -> str:
+    raw_value = os.getenv(name)
+    if raw_value is None or raw_value.strip() == "":
+        return default
+    return raw_value.strip()
 
-LANGUAGE = os.getenv("LANGUAGE", "ko").strip()
-SERVER_BASE_URL = os.getenv("SERVER_BASE_URL", "http://localhost:8080").strip().rstrip("/")
-DEVICE_ID = os.getenv("DEVICE_ID", "raspberry-duck-001").strip()
-USER_ID = os.getenv("USER_ID", "test-user").strip()
+
+OPENAI_API_KEY = _get_str("OPENAI_API_KEY")
+OPENAI_STT_MODEL = _get_str("OPENAI_STT_MODEL", "gpt-4o-transcribe")
+OPENAI_TTS_MODEL = _get_str("OPENAI_TTS_MODEL", "gpt-4o-mini-tts")
+OPENAI_TTS_VOICE = _get_str("OPENAI_TTS_VOICE", "marin")
+
+LANGUAGE = _get_str("LANGUAGE", "ko")
+SERVER_BASE_URL = _get_str("SERVER_BASE_URL", "http://localhost:8080").rstrip("/")
+DEVICE_ID = _get_str("DEVICE_ID", "raspberry-duck-001")
+USER_ID = _get_str("USER_ID", "test-user")
 
 RECORD_SECONDS = _get_int("RECORD_SECONDS", 7)
 REQUEST_TIMEOUT_SECONDS = _get_float("REQUEST_TIMEOUT_SECONDS", 8.0)
+IOT_REPORTING_ENABLED = _get_bool("IOT_REPORTING_ENABLED", True)
+IOT_EVENT_TIMEOUT_SECONDS = _get_float("IOT_EVENT_TIMEOUT_SECONDS", 2.0)
+IOT_FAILURE_BACKOFF_SECONDS = _get_float("IOT_FAILURE_BACKOFF_SECONDS", 30.0)
 
-INPUT_AUDIO_PATH = os.getenv("INPUT_AUDIO_PATH", str(AUDIO_DIR / "input.wav")).strip()
-RESPONSE_AUDIO_PATH = os.getenv("RESPONSE_AUDIO_PATH", str(AUDIO_DIR / "response.mp3")).strip()
+INPUT_AUDIO_PATH = _get_str("INPUT_AUDIO_PATH", str(AUDIO_DIR / "input.wav"))
+RESPONSE_AUDIO_PATH = _get_str("RESPONSE_AUDIO_PATH", str(AUDIO_DIR / "response.mp3"))
 
-MIC_DEVICE = os.getenv("MIC_DEVICE", "").strip()
-SPEAKER_DEVICE = os.getenv("SPEAKER_DEVICE", "").strip()
+MIC_DEVICE = _get_str("MIC_DEVICE")
+SPEAKER_DEVICE = _get_str("SPEAKER_DEVICE")
 
 RUN_CONTINUOUSLY = _get_bool("RUN_CONTINUOUSLY", True)
 
 LEARNING_TYPE = {
-    "processing": os.getenv("LEARNING_PROCESSING", "reflective").strip(),
-    "expression": os.getenv("LEARNING_EXPRESSION", "verbal").strip(),
-    "structure": os.getenv("LEARNING_STRUCTURE", "sequential").strip(),
+    "processing": _get_str("LEARNING_PROCESSING", "reflective"),
+    "expression": _get_str("LEARNING_EXPRESSION", "verbal"),
+    "structure": _get_str("LEARNING_STRUCTURE", "sequential"),
 }
 
 NO_SPEECH_MESSAGE = "음성을 잘 듣지 못했어요. 조금 더 가까이에서 다시 말해 주세요."
