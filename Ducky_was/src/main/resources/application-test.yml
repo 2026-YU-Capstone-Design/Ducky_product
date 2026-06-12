@@ -17,3 +17,8 @@ spring:
 
 openai:
   api-key:
+
+security:
+  jwt:
+    secret: test-token-secret
+    expiration-seconds: 3600
