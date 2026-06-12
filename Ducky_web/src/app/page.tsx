@@ -12,7 +12,11 @@ import { SignupStep1 } from "@/components/auth/SignupStep1";
 import { SignupStep2 } from "@/components/auth/SignupStep2";
 import { SignupStep3 } from "@/components/auth/SignupStep3";
 import { TermsModal } from "@/components/auth/TermsModal";
-import { LoginOptions } from "@/components/auth/LoginOptions";
+import {
+  LoginOptions,
+  LOGIN_SPLASH_IMAGES,
+  type LoginSplashImage,
+} from "@/components/auth/LoginOptions";
 import { EmailLogin } from "@/components/auth/EmailLogin";
 
 const comfortaa = Comfortaa({
@@ -40,7 +44,9 @@ export default function LandingPage() {
   const [signupStep, setSignupStep] = useState<1 | 2 | 3>(1);
   const [showTerms, setShowTerms] = useState<"service" | "marketing" | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [currentSplash, setCurrentSplash] = useState(1);
+  const [currentSplash, setCurrentSplash] = useState<LoginSplashImage>(
+    LOGIN_SPLASH_IMAGES[0],
+  );
   const [error, setError] = useState("");
 
   // 사용자 로그인 상태 및 정보 영구 저장
@@ -82,7 +88,15 @@ export default function LandingPage() {
   useEffect(() => {
     if (phase !== 3) return;
     const interval = setInterval(() => {
-      setCurrentSplash((prev) => (prev % 7) + 1);
+      setCurrentSplash((prev) => {
+        const currentIndex = LOGIN_SPLASH_IMAGES.indexOf(prev);
+        const nextIndex =
+          currentIndex === -1
+            ? 0
+            : (currentIndex + 1) % LOGIN_SPLASH_IMAGES.length;
+
+        return LOGIN_SPLASH_IMAGES[nextIndex];
+      });
     }, 4500); // 4.5초 주기
     return () => clearInterval(interval);
   }, [phase]);

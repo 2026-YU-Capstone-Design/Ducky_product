@@ -5,12 +5,15 @@ import Image from "next/image";
 import { Mail, MessageCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
+export const LOGIN_SPLASH_IMAGES = [1, 2, 3, 4, 6, 7] as const;
+export type LoginSplashImage = (typeof LOGIN_SPLASH_IMAGES)[number];
+
 /**
  * 로그인 옵션 선택 화면 컴포넌트에 전달되는 props
  */
 interface LoginOptionsProps {
   /** 현재 스플래시 이미지 인덱스 (1~7) */
-  currentSplash: number;
+  currentSplash: LoginSplashImage;
   /** Comfortaa 폰트 클래스 이름 */
   comfortaaClassName: string;
   /** 로그인 처리 중 여부 (로딩 상태) */
@@ -32,13 +35,13 @@ export function LoginOptions({
   handleSocialLogin,
 }: LoginOptionsProps) {
   return (
-    <div className="flex w-full flex-col gap-10 sm:gap-12 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(20rem,24rem)] lg:items-center lg:gap-16">
-      <div className="flex flex-col items-center space-y-5 sm:space-y-6 lg:items-start lg:space-y-7">
+    <div className="mx-auto flex w-full max-w-[56rem] flex-col gap-10 sm:gap-12 lg:grid lg:grid-cols-[minmax(16rem,22rem)_minmax(19rem,23.875rem)] lg:items-center lg:justify-center lg:gap-8 xl:gap-12">
+      <div className="flex flex-col items-center space-y-5 sm:space-y-6 lg:space-y-7">
         <div
           className="relative flex h-36 w-36 items-center justify-center transition-all duration-500 hover:scale-105 sm:h-44 sm:w-44 lg:h-64 lg:w-64"
-          aria-label="Ducky 캐릭터"
+          aria-label="Ducky character"
         >
-          {[1, 2, 3, 4, 5, 6, 7].map((num) => (
+          {LOGIN_SPLASH_IMAGES.map((num) => (
             <Image
               key={num}
               src={`/images/splash${num}.png`}
@@ -61,7 +64,7 @@ export function LoginOptions({
         </h1>
       </div>
 
-      <div className="mx-auto w-full max-w-md space-y-3.5 lg:mx-0">
+      <div className="mx-auto w-full max-w-md space-y-3.5 lg:mx-0 lg:max-w-none">
         <Button
           onClick={() => setEmailMode("login")}
           disabled={isLoading}
