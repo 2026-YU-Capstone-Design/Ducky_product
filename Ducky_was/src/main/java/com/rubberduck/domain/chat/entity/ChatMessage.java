@@ -44,11 +44,23 @@ public class ChatMessage {
     @Column(name = "input_type", length = 40)
     private String inputType;
 
+    @Column(name = "stt_text", length = 4000)
+    private String sttText;
+
+    @Column(name = "tts_text", length = 4000)
+    private String ttsText;
+
     @Column(name = "hint_level")
     private Integer hintLevel;
 
     @Column(name = "hint_number")
     private Integer hintNumber;
+
+    @Column(name = "stt_success")
+    private Boolean sttSuccess;
+
+    @Column(name = "tts_success")
+    private Boolean ttsSuccess;
 
     @Column(name = "sequence_no", nullable = false)
     private int sequenceNo;
@@ -71,6 +83,9 @@ public class ChatMessage {
         message.setMessageType(messageType);
         message.setInputType(inputType);
         message.setSequenceNo(sequenceNo);
+        if ("assistant".equals(sender)) {
+            message.setTtsText(messageText);
+        }
         return message;
     }
 

@@ -44,10 +44,29 @@ public class UserService {
         return getByLoginIdentifier(normalized);
     }
 
+    @Transactional
+    public User findOrCreateExternalUser(String userId) {
+        String normalized = normalizeExternalUserId(userId);
+        return userRepository.findByLoginId(normalized)
+                .orElseGet(() -> userRepository.save(User.create(
+                        normalized,
+                        normalized + "@ducky.local",
+                        normalized,
+                        "{external-device-user}"
+                )));
+    }
+
     private String normalizeIdentifier(String identifier) {
         if (identifier == null || identifier.isBlank()) {
             throw new CustomException(ErrorCode.INVALID_REQUEST);
         }
         return identifier.trim();
+    }
+
+    private String normalizeExternalUserId(String userId) {
+        if (userId == null || userId.isBlank()) {
+            return "test-user";
+        }
+        return userId.trim();
     }
 }

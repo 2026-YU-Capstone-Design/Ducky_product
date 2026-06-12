@@ -18,6 +18,7 @@ import com.rubberduck.domain.chat.repository.ConversationRepository;
 import com.rubberduck.domain.device.entity.Device;
 import com.rubberduck.domain.device.service.DeviceService;
 import com.rubberduck.domain.user.entity.User;
+import com.rubberduck.domain.user.service.UserService;
 import com.rubberduck.global.exception.CustomException;
 import com.rubberduck.global.exception.ErrorCode;
 
@@ -30,6 +31,7 @@ public class ChatService {
     private final ConversationRepository conversationRepository;
     private final ChatMessageRepository chatMessageRepository;
     private final DeviceService deviceService;
+    private final UserService userService;
     private final FallbackChatResponseService fallbackChatResponseService;
 
     @Transactional
@@ -63,6 +65,69 @@ public class ChatService {
     public ChatTurnResponse sendMessage(User user, Long conversationId, String messageText, String inputType) {
         Conversation conversation = getConversationEntity(conversationId);
         ensureOwner(conversation, user);
+        return appendUserTurn(user, conversation, messageText, inputType);
+    }
+
+    @Transactional
+    public ChatTurnResponse sendDeviceMessage(
+            String externalUserId,
+            String deviceSerial,
+            Long conversationId,
+            String messageText,
+            String inputType
+    ) {
+        Device device = deviceService.findOrCreateBySerial(deviceSerial);
+        Conversation conversation;
+        User user;
+
+        if (conversationId != null) {
+            conversation = getConversationEntity(conversationId);
+            user = conversation.getUser();
+        } else {
+            user = userService.findOrCreateExternalUser(externalUserId);
+            conversation = conversationRepository.findFirstByUserAndStatusOrderByUpdatedAtDesc(user, "in_progress")
+                    .orElseGet(() -> conversationRepository.save(
+                            Conversation.start(user, device, null, "Raspberry voice session", "음성 러버덕 질문 훈련")
+                    ));
+        }
+
+        if (conversation.getDevice() == null) {
+            conversation.setDevice(device);
+        }
+
+        return appendUserTurn(user, conversation, messageText, inputType == null ? "voice" : inputType);
+    }
+
+    @Transactional
+    public void recordConversationLog(
+            Long conversationId,
+            String userMessageText,
+            String assistantMessageText,
+            Boolean sttSuccess,
+            Boolean ttsSuccess
+    ) {
+        if (conversationId == null) {
+            return;
+        }
+        Conversation conversation = getConversationEntity(conversationId);
+        List<ChatMessage> latestUserMessages =
+                chatMessageRepository.findByConversationAndSenderOrderBySequenceNoDesc(conversation, "user");
+        if (!latestUserMessages.isEmpty()) {
+            ChatMessage latestUser = latestUserMessages.get(0);
+            latestUser.setSttText(userMessageText);
+            latestUser.setSttSuccess(sttSuccess);
+        }
+
+        List<ChatMessage> latestAssistantMessages =
+                chatMessageRepository.findByConversationAndSenderOrderBySequenceNoDesc(conversation, "assistant");
+        if (!latestAssistantMessages.isEmpty()) {
+            ChatMessage latestAssistant = latestAssistantMessages.get(0);
+            latestAssistant.setTtsText(assistantMessageText);
+            latestAssistant.setTtsSuccess(ttsSuccess);
+        }
+    }
+
+    private ChatTurnResponse appendUserTurn(User user, Conversation conversation, String messageText, String inputType) {
 
         String normalizedText = requireText(messageText);
         boolean completion = isCompletionText(normalizedText);
@@ -76,6 +141,9 @@ public class ChatService {
                 normalizeInputType(inputType),
                 userSequence
         );
+        if ("voice".equals(normalizeInputType(inputType))) {
+            userMessage.setSttText(normalizedText);
+        }
         conversation.increaseMessageCount();
 
         ChatMessage aiMessage = ChatMessage.create(

@@ -33,6 +33,15 @@ public class DeviceService {
                 .orElseGet(() -> deviceRepository.save(Device.create(normalizedSerial, firmwareVersion)));
     }
 
+    @Transactional
+    public Device findOrCreateBySerial(String serialNumber) {
+        String normalizedSerial = serialNumber == null || serialNumber.isBlank()
+                ? "raspberry-duck-001"
+                : serialNumber.trim();
+        return deviceRepository.findBySerialNumber(normalizedSerial)
+                .orElseGet(() -> deviceRepository.save(Device.create(normalizedSerial, null)));
+    }
+
     @Transactional(readOnly = true)
     public Device getById(Long deviceId) {
         return deviceRepository.findById(deviceId)
@@ -46,6 +55,12 @@ public class DeviceService {
         DeviceUser deviceUser = deviceUserRepository.findByDeviceAndUser(device, user)
                 .orElseGet(() -> deviceUserRepository.save(DeviceUser.link(device, user, role)));
         return DeviceLinkResponse.from(deviceUser);
+    }
+
+    @Transactional
+    public Device updateStatus(Device device, String status) {
+        device.setStatus(status == null || status.isBlank() ? "UNKNOWN" : status.trim());
+        return deviceRepository.save(device);
     }
 
     @Transactional(readOnly = true)

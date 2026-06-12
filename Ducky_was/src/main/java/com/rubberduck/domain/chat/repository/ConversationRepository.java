@@ -10,4 +10,6 @@ import com.rubberduck.domain.user.entity.User;
 public interface ConversationRepository extends JpaRepository<Conversation, Long> {
 
     List<Conversation> findByUserOrderByUpdatedAtDesc(User user);
+
+    java.util.Optional<Conversation> findFirstByUserAndStatusOrderByUpdatedAtDesc(User user, String status);
 }
