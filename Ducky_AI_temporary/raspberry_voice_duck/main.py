@@ -103,7 +103,8 @@ def _speak(text: str) -> bool:
 
 def run_once(conversation_id: int | None = None) -> bool:
     print("듣고 있어요. 문제를 설명해 주세요.")
-
+    _speak("듣고 있어요. 문제를 설명해 주세요.")
+    
     _report_state(LedState.RECORDING)
     record_audio(INPUT_AUDIO_PATH, duration=RECORD_SECONDS)
 
