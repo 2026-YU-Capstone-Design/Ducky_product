@@ -18,6 +18,7 @@ interface LoginOptionsProps {
   comfortaaClassName: string;
   /** 로그인 처리 중 여부 (로딩 상태) */
   isLoading: boolean;
+  socialLoadingPlatform: "kakao" | "naver" | null;
   /** 이메일 모드 (options, login, signup)를 변경하는 함수 */
   setEmailMode: Dispatch<SetStateAction<"options" | "login" | "signup">>;
   /** 소셜 로그인 버튼 클릭 핸들러 (kakao, naver) */
@@ -31,9 +32,14 @@ export function LoginOptions({
   currentSplash,
   comfortaaClassName,
   isLoading,
+  socialLoadingPlatform,
   setEmailMode,
   handleSocialLogin,
 }: LoginOptionsProps) {
+  const isDisabled = isLoading || socialLoadingPlatform !== null;
+  const isKakaoLoading = socialLoadingPlatform === "kakao";
+  const isNaverLoading = socialLoadingPlatform === "naver";
+
   return (
     <div className="mx-auto flex w-full max-w-[56rem] flex-col gap-10 sm:gap-12 lg:grid lg:grid-cols-[minmax(16rem,22rem)_minmax(19rem,23.875rem)] lg:items-center lg:justify-center lg:gap-8 xl:gap-12">
       <div className="flex flex-col items-center space-y-5 sm:space-y-6 lg:space-y-7">
@@ -67,7 +73,7 @@ export function LoginOptions({
       <div className="mx-auto w-full max-w-md space-y-3.5 lg:mx-0 lg:max-w-none">
         <Button
           onClick={() => setEmailMode("login")}
-          disabled={isLoading}
+          disabled={isDisabled}
           className="h-auto min-h-13 w-full whitespace-normal rounded-xl bg-[#EFECE5] px-4 py-3 text-center text-base font-bold leading-tight text-[#333333] shadow-none transition-transform hover:bg-[#E5E1D8] active:scale-[0.99] disabled:opacity-50"
         >
           <Mail className="h-5 w-5 text-[#333333]" />
@@ -75,10 +81,10 @@ export function LoginOptions({
         </Button>
         <Button
           onClick={() => handleSocialLogin("kakao")}
-          disabled={isLoading}
+          disabled={isDisabled}
           className="h-auto min-h-13 w-full whitespace-normal rounded-xl bg-[#FFE600] px-4 py-3 text-center text-base font-bold leading-tight text-[#191919] shadow-none transition-transform hover:bg-[#F2DA00] active:scale-[0.99] disabled:opacity-50"
         >
-          {isLoading ? (
+          {isKakaoLoading ? (
             <Loader2 className="h-5 w-5 animate-spin" />
           ) : (
             <MessageCircle className="h-5 w-5 fill-[#191919] text-[#191919]" />
@@ -87,10 +93,10 @@ export function LoginOptions({
         </Button>
         <Button
           onClick={() => handleSocialLogin("naver")}
-          disabled={isLoading}
+          disabled={isDisabled}
           className="h-auto min-h-13 w-full whitespace-normal rounded-xl bg-[#03C75A] px-4 py-3 text-center text-base font-bold leading-tight text-white shadow-none transition-transform hover:bg-[#02B350] active:scale-[0.99] disabled:opacity-50"
         >
-          {isLoading ? (
+          {isNaverLoading ? (
             <Loader2 className="h-5 w-5 animate-spin" />
           ) : (
             <span className="font-extrabold text-lg mr-1 select-none">N</span>

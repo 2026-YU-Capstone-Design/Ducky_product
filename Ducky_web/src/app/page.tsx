@@ -56,6 +56,9 @@ export default function LandingPage() {
   const [signupStep, setSignupStep] = useState<1 | 2 | 3>(1);
   const [showTerms, setShowTerms] = useState<"service" | "marketing" | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [socialLoadingPlatform, setSocialLoadingPlatform] = useState<
+    "kakao" | "naver" | null
+  >(null);
   const [currentSplash, setCurrentSplash] = useState<LoginSplashImage>(
     LOGIN_SPLASH_IMAGES[0],
   );
@@ -113,9 +116,29 @@ export default function LandingPage() {
     return () => clearInterval(interval);
   }, [phase]);
 
+  useEffect(() => {
+    const resetSocialLoading = () => {
+      setSocialLoadingPlatform(null);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        resetSocialLoading();
+      }
+    };
+
+    window.addEventListener("pageshow", resetSocialLoading);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("pageshow", resetSocialLoading);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []);
+
   const handleSocialLogin = (platform: "kakao" | "naver") => {
     try {
-      setIsLoading(true);
+      setSocialLoadingPlatform(platform);
       setError("");
       if (platform === "kakao") {
         const state = createOAuthState();
@@ -128,7 +151,7 @@ export default function LandingPage() {
       window.sessionStorage.setItem(NAVER_OAUTH_STATE_KEY, state);
       window.location.assign(buildNaverAuthorizeUrl(state));
     } catch (oauthError) {
-      setIsLoading(false);
+      setSocialLoadingPlatform(null);
       setEmailMode("login");
       setError(
         oauthError instanceof Error
@@ -340,6 +363,7 @@ export default function LandingPage() {
             currentSplash={currentSplash}
             comfortaaClassName={comfortaa.className}
             isLoading={isLoading}
+            socialLoadingPlatform={socialLoadingPlatform}
             setEmailMode={setEmailMode}
             handleSocialLogin={handleSocialLogin}
           />

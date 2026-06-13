@@ -26,7 +26,6 @@ export function buildKakaoAuthorizeUrl(state: string) {
     response_type: "code",
     client_id: restApiKey,
     redirect_uri: getKakaoRedirectUri(),
-    scope: "profile_nickname",
     state,
   });
 
