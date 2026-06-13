@@ -71,7 +71,10 @@ def _play_wav(audio_path: Path) -> None:
 def _play_with_mpg123(audio_path: Path) -> None:
     _require_command("mpg123")
 
-    command = ["mpg123", "-q", str(audio_path)]
+    command = ["mpg123", "-q"]
+    if SPEAKER_DEVICE:
+        command.extend(["-a", SPEAKER_DEVICE])
+    command.append(str(audio_path))
     _run_audio_command(command, "재생")
 
 
