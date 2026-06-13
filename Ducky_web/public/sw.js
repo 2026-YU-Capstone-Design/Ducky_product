@@ -1,6 +1,11 @@
-const CACHE_VERSION = "ducky-pwa-v1";
+const CACHE_VERSION = "ducky-pwa-v2";
 const OFFLINE_URL = "/offline";
-const CORE_ASSETS = [OFFLINE_URL, "/manifest.webmanifest", "/icons/ducky-icon.svg"];
+const CORE_ASSETS = [
+  OFFLINE_URL,
+  "/manifest.webmanifest",
+  "/icons/ducky-character-192.png",
+  "/icons/ducky-character-512.png",
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

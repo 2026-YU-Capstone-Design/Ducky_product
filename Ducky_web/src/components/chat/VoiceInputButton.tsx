@@ -34,7 +34,7 @@ function DuckyVoiceMark({
       className="relative flex size-10 items-center justify-center"
     >
       <Image
-        src="/images/splash5.png"
+        src="/icons/ducky-character.png"
         alt=""
         width={44}
         height={44}

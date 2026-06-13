@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { LogOut } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
@@ -19,8 +20,15 @@ export function Sidebar() {
   return (
     <aside className="hidden min-h-dvh w-64 shrink-0 border-r border-[#ECE7DC] bg-white px-4 py-5 transition-colors dark:border-white/10 dark:bg-[#201D19] md:flex md:flex-col">
       <Link href="/dashboard" className="mb-8 flex items-center gap-3 px-2">
-        <span className="flex size-10 items-center justify-center rounded-lg bg-[#FECA43] text-lg font-bold text-[#2E2A22]">
-          D
+        <span className="flex size-10 items-center justify-center overflow-hidden rounded-lg bg-[#FECA43]">
+          <Image
+            src="/icons/ducky-character.png"
+            alt=""
+            width={40}
+            height={40}
+            className="size-10 scale-[1.15] object-contain"
+            aria-hidden="true"
+          />
         </span>
         <span className="text-2xl font-bold tracking-tight text-[#FECA43]">
           Ducky
