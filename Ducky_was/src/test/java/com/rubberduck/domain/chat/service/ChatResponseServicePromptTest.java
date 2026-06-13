@@ -16,6 +16,23 @@ class ChatResponseServicePromptTest {
     private final ChatResponseService chatResponseService = new ChatResponseService("", "test-model", 1);
 
     @Test
+    void shortEnglishFragmentsAskForClarificationInsteadOfGuessingAcronyms() {
+        ChatResponseService.AiReply reply = chatResponseService.generateTurn(
+                "gd",
+                userWithLearningStyle("active", "visual", "sequential"),
+                "",
+                List.of(),
+                null
+        );
+
+        assertThat(reply.type()).isEqualTo("question");
+        assertThat(reply.content())
+                .contains("입력이 너무 짧아서")
+                .doesNotContain("Google")
+                .doesNotContain("Graphic");
+    }
+
+    @Test
     void turnPromptIncludesCurrentConversationHistoryAndCurrentInput() {
         User user = userWithLearningStyle("active", "visual", "sequential");
         Conversation conversation = Conversation.start(user, null, null, "정렬 공부", "정렬 알고리즘");

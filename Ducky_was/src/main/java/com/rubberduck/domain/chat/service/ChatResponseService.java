@@ -62,6 +62,13 @@ public class ChatResponseService {
             List<ChatMessage> conversationHistory,
             Map<String, String> learningType
     ) {
+        if (shouldAskForClarification(userText)) {
+            return new AiReply(
+                    "입력이 너무 짧아서 의미를 정확히 모르겠어요. 한글/영어 입력 상태를 확인해서 다시 입력해 주세요.",
+                    "question"
+            );
+        }
+
         ReplyMode mode = classifyReplyMode(userText);
         String prompt = buildTurnPrompt(userText, user, documentContext, conversationHistory, learningType, mode);
         String content = requestText(prompt);
@@ -281,6 +288,15 @@ public class ChatResponseService {
         return ReplyMode.RUBBER_DUCK;
     }
 
+    private boolean shouldAskForClarification(String userText) {
+        String normalized = userText == null ? "" : userText.replaceAll("\\s+", "").toLowerCase(Locale.ROOT);
+        if (normalized.isBlank() || normalized.equals("hi") || normalized.equals("hello")) {
+            return false;
+        }
+
+        return normalized.length() <= 2 && normalized.matches("[a-z0-9]+");
+    }
+
     LearningStyleContext resolveLearningStyle(User user, Map<String, String> learningType) {
         String processing = user == null ? "active" : user.getProcessingStyle();
         String expression = user == null ? "visual" : user.getExpressionStyle();
@@ -465,6 +481,7 @@ public class ChatResponseService {
         } catch (CustomException exception) {
             throw exception;
         } catch (Exception exception) {
+            exception.printStackTrace();
             throw new CustomException(ErrorCode.CHAT_RESPONSE_UNAVAILABLE);
         }
     }

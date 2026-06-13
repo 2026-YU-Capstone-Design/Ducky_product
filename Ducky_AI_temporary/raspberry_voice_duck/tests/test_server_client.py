@@ -154,7 +154,7 @@ class ServerClientTelemetryTest(unittest.TestCase):
                 },
                 "conversationId": 12,
             },
-            timeout=8.0,
+            timeout=30.0,
         )
 
     def test_telemetry_failure_uses_backoff(self) -> None:

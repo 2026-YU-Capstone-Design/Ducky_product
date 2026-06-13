@@ -81,7 +81,7 @@ export function ChatPage() {
         ? "대기 중"
         : raspberryCommand?.status === "CLAIMED"
           ? "녹음 중"
-          : "라즈베리로 말하기";
+          : "Ducky와 대화하기";
   const isRaspberryButtonDisabled =
     !raspberryDeviceId ||
     isRaspberryLoading ||
