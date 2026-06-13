@@ -14,6 +14,7 @@ import java.util.Map;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rubberduck.domain.auth.service.KakaoOAuthClient;
+import com.rubberduck.domain.auth.service.NaverOAuthClient;
 import com.rubberduck.domain.device.entity.Device;
 import com.rubberduck.domain.device.service.DeviceService;
 import com.rubberduck.domain.user.entity.User;
@@ -41,6 +42,9 @@ class AuthDeviceFlowTest {
 
     @MockitoBean
     private KakaoOAuthClient kakaoOAuthClient;
+
+    @MockitoBean
+    private NaverOAuthClient naverOAuthClient;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -294,6 +298,9 @@ class AuthDeviceFlowTest {
 
         String userId = readData(firstLoginResult).get("userInfo").get("id").asText();
 
+        when(kakaoOAuthClient.fetchUser(code, redirectUri))
+                .thenReturn(new KakaoOAuthClient.KakaoUser(providerUserId, "", "Renamed Kakao"));
+
         mockMvc.perform(post("/api/auth/oauth/kakao")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
@@ -301,7 +308,127 @@ class AuthDeviceFlowTest {
                                 "redirectUri", redirectUri
                         ))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.userInfo.id").value(userId));
+                .andExpect(jsonPath("$.data.userInfo.id").value(userId))
+                .andExpect(jsonPath("$.data.userInfo.name").value("Kakao Tester"));
+    }
+
+    @Test
+    void kakaoLoginUpdatesFallbackNameWithNicknameOnNextLogin() throws Exception {
+        String suffix = String.valueOf(System.nanoTime());
+        String code = "kakao-code-fallback-" + suffix;
+        String redirectUri = "https://ducklab.site/auth/callback/kakao";
+        String providerUserId = "12345" + suffix;
+
+        when(kakaoOAuthClient.fetchUser(code, redirectUri))
+                .thenReturn(new KakaoOAuthClient.KakaoUser(providerUserId, "", ""));
+
+        MvcResult firstLoginResult = mockMvc.perform(post("/api/auth/oauth/kakao")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "code", code,
+                                "redirectUri", redirectUri
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.userInfo.name").value("Kakao User"))
+                .andReturn();
+
+        String userId = readData(firstLoginResult).get("userInfo").get("id").asText();
+
+        when(kakaoOAuthClient.fetchUser(code, redirectUri))
+                .thenReturn(new KakaoOAuthClient.KakaoUser(providerUserId, "", "춘식이"));
+
+        mockMvc.perform(post("/api/auth/oauth/kakao")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "code", code,
+                                "redirectUri", redirectUri
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.userInfo.id").value(userId))
+                .andExpect(jsonPath("$.data.userInfo.name").value("춘식이"));
+    }
+
+    @Test
+    void naverLoginCreatesSocialUserAndReusesExistingAccount() throws Exception {
+        String suffix = String.valueOf(System.nanoTime());
+        String code = "naver-code-" + suffix;
+        String state = "naver-state-" + suffix;
+        String redirectUri = "https://ducklab.site/auth/callback/naver";
+        String providerUserId = "naver" + suffix;
+
+        when(naverOAuthClient.fetchUser(code, state, redirectUri))
+                .thenReturn(new NaverOAuthClient.NaverUser(providerUserId, "", "Naver Tester"));
+
+        MvcResult firstLoginResult = mockMvc.perform(post("/api/auth/oauth/naver")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "code", code,
+                                "state", state,
+                                "redirectUri", redirectUri
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.accessToken").isString())
+                .andExpect(jsonPath("$.data.userInfo.name").value("Naver Tester"))
+                .andExpect(jsonPath("$.data.userInfo.email").value(
+                        "naver_" + providerUserId + "@social.ducky.local"
+                ))
+                .andExpect(jsonPath("$.data.userInfo.loginId").value("naver_" + providerUserId))
+                .andReturn();
+
+        String userId = readData(firstLoginResult).get("userInfo").get("id").asText();
+
+        when(naverOAuthClient.fetchUser(code, state, redirectUri))
+                .thenReturn(new NaverOAuthClient.NaverUser(providerUserId, "", "Renamed Naver"));
+
+        mockMvc.perform(post("/api/auth/oauth/naver")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "code", code,
+                                "state", state,
+                                "redirectUri", redirectUri
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.userInfo.id").value(userId))
+                .andExpect(jsonPath("$.data.userInfo.name").value("Naver Tester"));
+    }
+
+    @Test
+    void naverLoginUpdatesFallbackNameWithNicknameOnNextLogin() throws Exception {
+        String suffix = String.valueOf(System.nanoTime());
+        String code = "naver-code-fallback-" + suffix;
+        String state = "naver-state-fallback-" + suffix;
+        String redirectUri = "https://ducklab.site/auth/callback/naver";
+        String providerUserId = "naver-fallback" + suffix;
+
+        when(naverOAuthClient.fetchUser(code, state, redirectUri))
+                .thenReturn(new NaverOAuthClient.NaverUser(providerUserId, "", ""));
+
+        MvcResult firstLoginResult = mockMvc.perform(post("/api/auth/oauth/naver")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "code", code,
+                                "state", state,
+                                "redirectUri", redirectUri
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.userInfo.name").value("Naver User"))
+                .andReturn();
+
+        String userId = readData(firstLoginResult).get("userInfo").get("id").asText();
+
+        when(naverOAuthClient.fetchUser(code, state, redirectUri))
+                .thenReturn(new NaverOAuthClient.NaverUser(providerUserId, "", "네이버덕"));
+
+        mockMvc.perform(post("/api/auth/oauth/naver")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "code", code,
+                                "state", state,
+                                "redirectUri", redirectUri
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.userInfo.id").value(userId))
+                .andExpect(jsonPath("$.data.userInfo.name").value("네이버덕"));
     }
 
     private JsonNode signupUser(String email, String loginId, String password) throws Exception {

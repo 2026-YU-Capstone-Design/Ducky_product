@@ -25,6 +25,10 @@ oauth:
     rest-api-key: ${KAKAO_REST_API_KEY:}
     client-secret: ${KAKAO_CLIENT_SECRET:}
     request-timeout-seconds: ${KAKAO_REQUEST_TIMEOUT_SECONDS:10}
+  naver:
+    client-id: ${NAVER_CLIENT_ID:}
+    client-secret: ${NAVER_CLIENT_SECRET:}
+    request-timeout-seconds: ${NAVER_REQUEST_TIMEOUT_SECONDS:10}
 
 security:
   jwt:
