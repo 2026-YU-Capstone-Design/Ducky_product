@@ -40,7 +40,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-    let readyTimer: ReturnType<typeof window.setTimeout> | undefined;
+    let readyTimer: number | undefined;
     const startedAt = Date.now();
 
     function showReadyAfterSplash() {
