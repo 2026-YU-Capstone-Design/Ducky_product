@@ -1,5 +1,6 @@
 package com.rubberduck.domain.auth;
 
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -12,6 +13,7 @@ import java.util.Map;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.rubberduck.domain.auth.service.KakaoOAuthClient;
 import com.rubberduck.domain.device.entity.Device;
 import com.rubberduck.domain.device.service.DeviceService;
 import com.rubberduck.domain.user.entity.User;
@@ -21,6 +23,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -35,6 +38,9 @@ class AuthDeviceFlowTest {
 
     @Autowired
     private DeviceService deviceService;
+
+    @MockitoBean
+    private KakaoOAuthClient kakaoOAuthClient;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -259,6 +265,43 @@ class AuthDeviceFlowTest {
         Device device = deviceService.getById(Long.parseLong(deviceId));
         assertThat(deviceService.findLinkedUser(device).map(User::getId))
                 .contains(Long.parseLong(secondUserId));
+    }
+
+    @Test
+    void kakaoLoginCreatesSocialUserAndReusesExistingAccount() throws Exception {
+        String suffix = String.valueOf(System.nanoTime());
+        String code = "kakao-code-" + suffix;
+        String redirectUri = "https://ducklab.site/auth/callback/kakao";
+        String providerUserId = "98765" + suffix;
+
+        when(kakaoOAuthClient.fetchUser(code, redirectUri))
+                .thenReturn(new KakaoOAuthClient.KakaoUser(providerUserId, "", "Kakao Tester"));
+
+        MvcResult firstLoginResult = mockMvc.perform(post("/api/auth/oauth/kakao")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "code", code,
+                                "redirectUri", redirectUri
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.accessToken").isString())
+                .andExpect(jsonPath("$.data.userInfo.name").value("Kakao Tester"))
+                .andExpect(jsonPath("$.data.userInfo.email").value(
+                        "kakao_" + providerUserId + "@social.ducky.local"
+                ))
+                .andExpect(jsonPath("$.data.userInfo.loginId").value("kakao_" + providerUserId))
+                .andReturn();
+
+        String userId = readData(firstLoginResult).get("userInfo").get("id").asText();
+
+        mockMvc.perform(post("/api/auth/oauth/kakao")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "code", code,
+                                "redirectUri", redirectUri
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.userInfo.id").value(userId));
     }
 
     private JsonNode signupUser(String email, String loginId, String password) throws Exception {

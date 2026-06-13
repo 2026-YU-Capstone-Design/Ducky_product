@@ -20,6 +20,12 @@ openai:
   chat-model: ${OPENAI_CHAT_MODEL:gpt-4.1-mini}
   request-timeout-seconds: ${OPENAI_REQUEST_TIMEOUT_SECONDS:30}
 
+oauth:
+  kakao:
+    rest-api-key: ${KAKAO_REST_API_KEY:}
+    client-secret: ${KAKAO_CLIENT_SECRET:}
+    request-timeout-seconds: ${KAKAO_REQUEST_TIMEOUT_SECONDS:10}
+
 security:
   jwt:
     secret: ${JWT_SECRET:ducky-local-dev-token-secret}

@@ -37,6 +37,11 @@ interface SignupPayload {
   password: string;
 }
 
+interface KakaoLoginPayload {
+  code: string;
+  redirectUri: string;
+}
+
 export interface UpdateLearningStylePayload {
   processing: User["learningStyle"]["processing"];
   expression: User["learningStyle"]["expression"];
@@ -86,6 +91,15 @@ export async function signup(payload: SignupPayload) {
       ...payload,
       loginId: payload.email.trim().toLowerCase(),
     },
+  });
+
+  return saveAuthResponse(authResponse);
+}
+
+export async function loginWithKakao(payload: KakaoLoginPayload) {
+  const authResponse = await apiRequest<AuthResponse>("/api/auth/oauth/kakao", {
+    method: "POST",
+    body: payload,
   });
 
   return saveAuthResponse(authResponse);

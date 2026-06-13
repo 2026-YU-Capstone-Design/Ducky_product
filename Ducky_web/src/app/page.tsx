@@ -7,6 +7,11 @@ import { Comfortaa } from "next/font/google";
 import { checkEmailAvailability, login, signup } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/client";
 import { ensureDefaultRaspberryLinked } from "@/lib/api/devices";
+import {
+  buildKakaoAuthorizeUrl,
+  createOAuthState,
+  KAKAO_OAUTH_STATE_KEY,
+} from "@/lib/auth/kakao";
 import { defaultUser, USER_STORAGE_KEY } from "@/lib/auth/storage";
 import type { User } from "@/types/user";
 
@@ -104,10 +109,27 @@ export default function LandingPage() {
   }, [phase]);
 
   const handleSocialLogin = (platform: "kakao" | "naver") => {
-    setEmailMode("login");
-    setError(
-      `${platform === "kakao" ? "Kakao" : "Naver"} login is not connected yet. Please use email login.`,
-    );
+    if (platform !== "kakao") {
+      setEmailMode("login");
+      setError("네이버 로그인은 아직 연결되지 않았습니다. 이메일 로그인을 사용해 주세요.");
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setError("");
+      const state = createOAuthState();
+      window.sessionStorage.setItem(KAKAO_OAUTH_STATE_KEY, state);
+      window.location.assign(buildKakaoAuthorizeUrl(state));
+    } catch (oauthError) {
+      setIsLoading(false);
+      setEmailMode("login");
+      setError(
+        oauthError instanceof Error
+          ? oauthError.message
+          : "카카오 로그인 시작에 실패했습니다.",
+      );
+    }
   };
 
   const finishAuthentication = async (user: User) => {
