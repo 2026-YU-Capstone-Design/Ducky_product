@@ -1,13 +1,16 @@
 "use client";
 
-import { CalendarDays, MessageCircle, Sparkles } from "lucide-react";
+import { CalendarDays, Loader2, MessageCircle, Sparkles, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import type { Session } from "@/types/session";
 import { cn } from "@/lib/utils";
 
 interface SessionCardProps {
+  isDeleting?: boolean;
   isSelected?: boolean;
+  onDelete: (session: Session) => void;
   onSelect: (session: Session) => void;
   session: Session;
 }
@@ -24,7 +27,9 @@ function formatDate(value: string) {
 }
 
 export function SessionCard({
+  isDeleting,
   isSelected,
+  onDelete,
   onSelect,
   session,
 }: SessionCardProps) {
@@ -82,6 +87,23 @@ export function SessionCard({
             </span>
           </div>
         </button>
+        <div className="border-t border-[#E7DDC8] px-4 py-3 dark:border-white/10 sm:px-5">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={isDeleting}
+            onClick={() => onDelete(session)}
+            className="h-8 w-full gap-2 border-red-200 bg-white text-red-700 hover:bg-red-50 dark:border-red-500/30 dark:bg-transparent dark:text-red-200 dark:hover:bg-red-500/10"
+          >
+            {isDeleting ? (
+              <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+            ) : (
+              <Trash2 className="size-3.5" aria-hidden="true" />
+            )}
+            삭제
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );

@@ -12,4 +12,6 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
     List<ChatMessage> findByConversationOrderBySequenceNoAsc(Conversation conversation);
 
     List<ChatMessage> findByConversationAndSenderOrderBySequenceNoDesc(Conversation conversation, String sender);
+
+    void deleteByConversation(Conversation conversation);
 }

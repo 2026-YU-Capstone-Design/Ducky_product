@@ -1,6 +1,7 @@
 package com.rubberduck.domain.chat;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -85,6 +86,21 @@ class ChatFlowTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.messageCount").value(0))
                 .andExpect(jsonPath("$.data.hintCount").value(0));
+
+        mockMvc.perform(delete("/api/chat/conversations/" + conversationId)
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+
+        mockMvc.perform(get("/api/chat/conversations/" + conversationId)
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.success").value(false));
+
+        mockMvc.perform(get("/api/chat/conversations")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(0));
     }
 
     private String signupAndGetAccessToken() throws Exception {

@@ -2,6 +2,7 @@ package com.rubberduck.domain.chat.controller;
 
 import java.util.List;
 
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -92,5 +93,14 @@ public class ChatController {
             @PathVariable Long conversationId
     ) {
         return ApiResponse.ok(chatService.endConversation(authService.requireUser(authorization), conversationId));
+    }
+
+    @DeleteMapping("/conversations/{conversationId}")
+    public ApiResponse<Void> deleteConversation(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @PathVariable Long conversationId
+    ) {
+        chatService.deleteConversation(authService.requireUser(authorization), conversationId);
+        return ApiResponse.ok();
     }
 }
