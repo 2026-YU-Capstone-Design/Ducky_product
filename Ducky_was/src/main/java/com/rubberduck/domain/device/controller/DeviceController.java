@@ -11,10 +11,13 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.rubberduck.domain.auth.service.AuthService;
+import com.rubberduck.domain.device.dto.DeviceCommandResponse;
 import com.rubberduck.domain.device.dto.DeviceLinkResponse;
 import com.rubberduck.domain.device.dto.DeviceResponse;
 import com.rubberduck.domain.device.dto.LinkDeviceRequest;
 import com.rubberduck.domain.device.dto.RegisterDeviceRequest;
+import com.rubberduck.domain.device.dto.StartDeviceCommandRequest;
+import com.rubberduck.domain.device.service.DeviceCommandService;
 import com.rubberduck.domain.device.service.DeviceService;
 import com.rubberduck.global.response.ApiResponse;
 
@@ -26,6 +29,7 @@ import lombok.RequiredArgsConstructor;
 public class DeviceController {
 
     private final AuthService authService;
+    private final DeviceCommandService deviceCommandService;
     private final DeviceService deviceService;
 
     @PostMapping
@@ -46,5 +50,28 @@ public class DeviceController {
             @RequestHeader(value = "Authorization", required = false) String authorization
     ) {
         return ApiResponse.ok(deviceService.listForUser(authService.requireUser(authorization)));
+    }
+
+    @PostMapping("/{deviceId}/commands/start-recording")
+    public ApiResponse<DeviceCommandResponse> startRecordingCommand(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @PathVariable Long deviceId,
+            @RequestBody StartDeviceCommandRequest request
+    ) {
+        return ApiResponse.ok(DeviceCommandResponse.from(deviceCommandService.startRecording(
+                authService.requireUser(authorization),
+                deviceId,
+                request.conversationId()
+        )));
+    }
+
+    @GetMapping("/{deviceId}/commands/latest")
+    public ApiResponse<DeviceCommandResponse> latestCommand(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @PathVariable Long deviceId
+    ) {
+        return ApiResponse.ok(deviceCommandService.latestForUser(authService.requireUser(authorization), deviceId)
+                .map(DeviceCommandResponse::from)
+                .orElse(null));
     }
 }

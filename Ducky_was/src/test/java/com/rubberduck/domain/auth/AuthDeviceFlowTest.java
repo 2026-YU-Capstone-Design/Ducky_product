@@ -139,6 +139,91 @@ class AuthDeviceFlowTest {
                         .header("Authorization", "Bearer " + accessToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].id").value(deviceId));
+
+        MvcResult conversationResult = mockMvc.perform(post("/api/chat/conversations")
+                        .header("Authorization", "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "title", "Raspberry voice session",
+                                "topic", "Remote command"
+                        ))))
+                .andExpect(status().isOk())
+                .andReturn();
+        Long conversationId = readData(conversationResult).get("id").asLong();
+
+        MvcResult secondConversationResult = mockMvc.perform(post("/api/chat/conversations")
+                        .header("Authorization", "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "title", "Another session",
+                                "topic", "Duplicate command"
+                        ))))
+                .andExpect(status().isOk())
+                .andReturn();
+        Long secondConversationId = readData(secondConversationResult).get("id").asLong();
+
+        MvcResult commandResult = mockMvc.perform(post("/api/devices/" + deviceId + "/commands/start-recording")
+                        .header("Authorization", "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "conversation_id", conversationId
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.commandType").value("START_RECORDING"))
+                .andExpect(jsonPath("$.data.status").value("PENDING"))
+                .andExpect(jsonPath("$.data.conversationId").value(conversationId))
+                .andReturn();
+
+        String commandId = readData(commandResult).get("id").asText();
+
+        mockMvc.perform(post("/api/devices/" + deviceId + "/commands/start-recording")
+                        .header("Authorization", "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "conversation_id", secondConversationId
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(commandId))
+                .andExpect(jsonPath("$.data.conversationId").value(conversationId));
+
+        mockMvc.perform(get("/api/devices/" + deviceId + "/commands/latest")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(commandId))
+                .andExpect(jsonPath("$.data.status").value("PENDING"));
+
+        mockMvc.perform(post("/api/iot/commands/next")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "device_id", "raspberry-duck-" + suffix
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.available").value(true))
+                .andExpect(jsonPath("$.data.commandId").value(Long.parseLong(commandId)))
+                .andExpect(jsonPath("$.data.commandType").value("START_RECORDING"))
+                .andExpect(jsonPath("$.data.conversationId").value(conversationId));
+
+        mockMvc.perform(post("/api/iot/commands/next")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "device_id", "raspberry-duck-" + suffix
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.available").value(false));
+
+        mockMvc.perform(post("/api/iot/commands/" + commandId + "/complete")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "device_id", "raspberry-duck-" + suffix,
+                                "success", true
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.result").value(true));
+
+        mockMvc.perform(get("/api/devices/" + deviceId + "/commands/latest")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("COMPLETED"));
     }
 
     @Test

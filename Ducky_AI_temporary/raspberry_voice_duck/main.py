@@ -1,9 +1,11 @@
 import logging
+import time
 from typing import Any
 
 from audio_io import play_audio, record_audio
 from config import (
     INPUT_AUDIO_PATH,
+    COMMAND_POLL_SECONDS,
     NO_SPEECH_MESSAGE,
     RECORD_SECONDS,
     RESPONSE_AUDIO_PATH,
@@ -11,11 +13,14 @@ from config import (
     SERVER_FAILURE_MESSAGE,
     STT_FAILURE_MESSAGE,
     TTS_FAILURE_MESSAGE,
+    TRIGGER_MODE,
     ensure_runtime_dirs,
     validate_required_environment,
 )
 from led_state import LedState
 from server_client import (
+    complete_command,
+    fetch_next_command,
     report_iot_error,
     report_iot_state,
     report_tts_complete,
@@ -48,6 +53,22 @@ def _message_id_from_response(server_response: dict[str, Any]) -> int | None:
     return None
 
 
+def _int_from_value(value: object) -> int | None:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.isdigit():
+        return int(value)
+    return None
+
+
+def _command_id_from_command(command: dict[str, Any]) -> int | None:
+    return _int_from_value(command.get("commandId") or command.get("command_id"))
+
+
+def _conversation_id_from_command(command: dict[str, Any]) -> int | None:
+    return _int_from_value(command.get("conversationId") or command.get("conversation_id"))
+
+
 def configure_logging() -> None:
     logging.basicConfig(
         level=logging.INFO,
@@ -55,9 +76,9 @@ def configure_logging() -> None:
     )
 
 
-def _get_server_response(user_text: str) -> tuple[str, dict[str, Any]]:
+def _get_server_response(user_text: str, conversation_id: int | None = None) -> tuple[str, dict[str, Any]]:
     try:
-        server_response = send_message_to_server(user_text)
+        server_response = send_message_to_server(user_text, conversation_id=conversation_id)
     except Exception as exc:
         logger.warning("Server conversation failed: %s", exc)
         _report_error("SERVER_CONVERSATION_FAILED", exc)
@@ -80,7 +101,7 @@ def _speak(text: str) -> bool:
     return True
 
 
-def run_once() -> None:
+def run_once(conversation_id: int | None = None) -> bool:
     print("듣고 있어요. 문제를 설명해 주세요.")
 
     _report_state(LedState.RECORDING)
@@ -104,7 +125,7 @@ def run_once() -> None:
     else:
         _report_state(LedState.THINKING)
         try:
-            response_text, server_response = _get_server_response(user_text)
+            response_text, server_response = _get_server_response(user_text, conversation_id=conversation_id)
         except Exception:
             _report_state(LedState.ERROR)
             response_text = SERVER_FAILURE_MESSAGE
@@ -135,6 +156,44 @@ def run_once() -> None:
             _report_error("CONVERSATION_LOG_SAVE_FAILED", "Conversation log save failed")
 
     _report_state(LedState.IDLE)
+    return True
+
+
+def run_command_loop() -> None:
+    _report_state(LedState.IDLE)
+    while True:
+        try:
+            command = fetch_next_command()
+            if not command:
+                time.sleep(COMMAND_POLL_SECONDS)
+                continue
+
+            command_id = _command_id_from_command(command)
+            command_type = command.get("commandType") or command.get("command_type")
+            if command_type != "START_RECORDING":
+                logger.warning("Unknown command type from server: %r", command_type)
+                if command_id is not None:
+                    complete_command(command_id, False, f"Unknown command type: {command_type}")
+                continue
+
+            try:
+                run_once(conversation_id=_conversation_id_from_command(command))
+            except Exception as exc:
+                logger.exception("Command execution failed")
+                _report_state(LedState.ERROR)
+                _report_error("COMMAND_EXECUTION_FAILED", exc)
+                if command_id is not None:
+                    complete_command(command_id, False, str(exc))
+                print(f"Command failed: {exc}")
+                _speak("오류가 발생했습니다. 잠시 후 다시 시도해 주세요.")
+                continue
+
+            if command_id is not None:
+                complete_command(command_id, True)
+        except KeyboardInterrupt:
+            _report_state(LedState.STOPPED)
+            print("?꾨줈洹몃옩??醫낅즺?⑸땲??")
+            break
 
 
 def main() -> None:
@@ -148,6 +207,10 @@ def main() -> None:
         _report_state(LedState.ERROR)
         _report_error("CONFIGURATION_ERROR", exc)
         print(exc)
+        return
+
+    if TRIGGER_MODE == "command":
+        run_command_loop()
         return
 
     if not RUN_CONTINUOUSLY:

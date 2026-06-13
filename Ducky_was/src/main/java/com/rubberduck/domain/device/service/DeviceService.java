@@ -49,6 +49,14 @@ public class DeviceService {
                 .orElseThrow(() -> new CustomException(ErrorCode.DEVICE_NOT_FOUND));
     }
 
+    @Transactional(readOnly = true)
+    public Device requireLinkedDevice(User user, Long deviceId) {
+        Device device = getById(deviceId);
+        deviceUserRepository.findByDeviceAndUser(device, user)
+                .orElseThrow(() -> new CustomException(ErrorCode.UNAUTHORIZED));
+        return device;
+    }
+
     @Transactional
     public DeviceLinkResponse link(Long deviceId, String userId, String role) {
         Device device = getById(deviceId);

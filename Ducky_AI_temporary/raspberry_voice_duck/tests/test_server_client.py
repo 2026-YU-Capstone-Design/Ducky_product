@@ -63,6 +63,100 @@ class ServerClientTelemetryTest(unittest.TestCase):
             timeout=2.0,
         )
 
+    def test_fetch_next_command_returns_claimed_command(self) -> None:
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = {
+            "success": True,
+            "data": {
+                "available": True,
+                "commandId": 7,
+                "commandType": "START_RECORDING",
+                "conversationId": 12,
+            },
+        }
+
+        with patch.object(server_client.requests, "post", return_value=response) as post:
+            command = server_client.fetch_next_command()
+
+        self.assertEqual(
+            {
+                "available": True,
+                "commandId": 7,
+                "commandType": "START_RECORDING",
+                "conversationId": 12,
+            },
+            command,
+        )
+        post.assert_called_once_with(
+            "http://localhost:8080/api/iot/commands/next",
+            json={"device_id": "raspberry-duck-001"},
+            timeout=2.0,
+        )
+
+    def test_fetch_next_command_returns_none_when_empty(self) -> None:
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = {
+            "success": True,
+            "data": {
+                "available": False,
+                "commandId": None,
+                "commandType": None,
+                "conversationId": None,
+            },
+        }
+
+        with patch.object(server_client.requests, "post", return_value=response):
+            self.assertIsNone(server_client.fetch_next_command())
+
+    def test_complete_command_posts_success_payload(self) -> None:
+        response = Mock()
+        response.raise_for_status.return_value = None
+
+        with patch.object(server_client.requests, "post", return_value=response) as post:
+            result = server_client.complete_command(7, True)
+
+        self.assertTrue(result)
+        post.assert_called_once_with(
+            "http://localhost:8080/api/iot/commands/7/complete",
+            json={
+                "device_id": "raspberry-duck-001",
+                "success": True,
+            },
+            timeout=2.0,
+        )
+
+    def test_send_message_to_server_includes_conversation_id(self) -> None:
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = {
+            "conversationId": 12,
+            "message": "next question",
+            "shouldSaveLog": True,
+        }
+
+        with patch.object(server_client.requests, "post", return_value=response) as post:
+            data = server_client.send_message_to_server("hello", conversation_id=12)
+
+        self.assertEqual("next question", data["message"])
+        post.assert_called_once_with(
+            "http://localhost:8080/api/duck/conversation",
+            json={
+                "deviceId": "raspberry-duck-001",
+                "userId": "test-user",
+                "inputType": "voice",
+                "message": "hello",
+                "learningType": {
+                    "processing": "reflective",
+                    "expression": "verbal",
+                    "structure": "sequential",
+                },
+                "conversationId": 12,
+            },
+            timeout=8.0,
+        )
+
     def test_telemetry_failure_uses_backoff(self) -> None:
         with patch.object(
             server_client.requests,

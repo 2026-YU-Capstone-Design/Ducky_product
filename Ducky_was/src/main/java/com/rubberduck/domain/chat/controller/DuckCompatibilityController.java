@@ -28,9 +28,10 @@ public class DuckCompatibilityController {
         ChatTurnResponse turn = chatService.sendDeviceMessage(
                 request.userId(),
                 request.deviceId(),
-                null,
+                request.conversationId(),
                 request.message(),
-                request.inputType()
+                request.inputType(),
+                request.learningType()
         );
         return new DuckConversationResponse(
                 Long.parseLong(turn.conversationId()),

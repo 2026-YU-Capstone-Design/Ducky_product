@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   endConversation,
   getConversation,
@@ -324,11 +324,6 @@ export function useChatSession({ enabled = true }: UseChatSessionOptions = {}) {
     }
   }, [activeSession.id, enabled, isThinking, status]);
 
-  const userMessageCount = useMemo(
-    () => messages.filter((message) => message.role === "user").length,
-    [messages],
-  );
-
   return {
     activeSession,
     completeSession,
@@ -343,7 +338,6 @@ export function useChatSession({ enabled = true }: UseChatSessionOptions = {}) {
     requestHint,
     retry: loadSession,
     sendMessage,
-    stageIndex: Math.min(userMessageCount, 3),
     status,
   };
 }

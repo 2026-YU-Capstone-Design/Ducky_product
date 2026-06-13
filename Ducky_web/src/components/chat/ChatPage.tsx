@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertCircle, Bot, Lightbulb, Loader2, RefreshCw } from "lucide-react";
+import { AlertCircle, Bot, Lightbulb, Loader2, Mic, RefreshCw } from "lucide-react";
 import { Comfortaa } from "next/font/google";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -14,6 +14,13 @@ import {
 } from "@/components/ui/sheet";
 import { useChatSession } from "@/hooks/useChatSession";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
+import {
+  DEFAULT_RASPBERRY_SERIAL,
+  getLatestDeviceCommand,
+  listDevices,
+  startRaspberryRecording,
+  type DeviceCommandResponse,
+} from "@/lib/api/devices";
 import { ChatBubble } from "./ChatBubble";
 import { ChatInput } from "./ChatInput";
 import { HintPanel } from "./HintPanel";
@@ -23,9 +30,22 @@ const comfortaa = Comfortaa({
   weight: ["700"],
 });
 
+function getRaspberryErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return "라즈베리 명령을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.";
+}
+
 export function ChatPage() {
   const [draft, setDraft] = useState("");
   const [isHintOpen, setIsHintOpen] = useState(false);
+  const [raspberryDeviceId, setRaspberryDeviceId] = useState<string | null>(null);
+  const [raspberryCommand, setRaspberryCommand] =
+    useState<DeviceCommandResponse | null>(null);
+  const [raspberryError, setRaspberryError] = useState<string | null>(null);
+  const [isRaspberryLoading, setIsRaspberryLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const chat = useChatSession();
   const {
@@ -42,7 +62,6 @@ export function ChatPage() {
     requestHint,
     retry,
     sendMessage,
-    stageIndex,
   } = chat;
 
   const handleTranscript = useCallback((text: string) => {
@@ -52,10 +71,120 @@ export function ChatPage() {
   const voice = useVoiceInput({
     onTranscript: handleTranscript,
   });
+  const isRaspberryCommandActive =
+    raspberryCommand?.status === "PENDING" || raspberryCommand?.status === "CLAIMED";
+  const raspberryButtonLabel = !raspberryDeviceId
+    ? "라즈베리 없음"
+    : isRaspberryLoading
+      ? "요청 중"
+      : raspberryCommand?.status === "PENDING"
+        ? "대기 중"
+        : raspberryCommand?.status === "CLAIMED"
+          ? "녹음 중"
+          : "라즈베리로 말하기";
+  const isRaspberryButtonDisabled =
+    !raspberryDeviceId ||
+    isRaspberryLoading ||
+    isRaspberryCommandActive ||
+    isThinking ||
+    isCompleted ||
+    isLoadingSession ||
+    !isReady;
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, isThinking]);
+
+  useEffect(() => {
+    if (!isReady) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadRaspberryDevice() {
+      try {
+        const devices = await listDevices();
+        if (cancelled) return;
+
+        const raspberry = devices.find(
+          (device) => device.serialNumber === DEFAULT_RASPBERRY_SERIAL,
+        );
+        setRaspberryDeviceId(raspberry?.id ?? null);
+
+        if (!raspberry) {
+          setRaspberryCommand(null);
+          return;
+        }
+
+        const latestCommand = await getLatestDeviceCommand(raspberry.id);
+        if (!cancelled) {
+          setRaspberryCommand(latestCommand);
+        }
+      } catch (deviceError) {
+        if (!cancelled) {
+          setRaspberryError(getRaspberryErrorMessage(deviceError));
+        }
+      }
+    }
+
+    void loadRaspberryDevice();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isReady]);
+
+  useEffect(() => {
+    if (!raspberryDeviceId || !isRaspberryCommandActive) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      void getLatestDeviceCommand(raspberryDeviceId)
+        .then((latestCommand) => {
+          setRaspberryCommand(latestCommand);
+
+          if (latestCommand?.status === "COMPLETED") {
+            setRaspberryError(null);
+            void retry();
+          }
+          if (latestCommand?.status === "FAILED") {
+            setRaspberryError(
+              latestCommand.errorMessage ||
+                "라즈베리 녹음 명령이 실패했습니다. 다시 시도해 주세요.",
+            );
+            void retry();
+          }
+        })
+        .catch((pollError) => {
+          setRaspberryError(getRaspberryErrorMessage(pollError));
+        });
+    }, 1500);
+
+    return () => window.clearInterval(timer);
+  }, [isRaspberryCommandActive, raspberryDeviceId, retry]);
+
+  const handleStartRaspberry = useCallback(async () => {
+    if (!raspberryDeviceId || !activeSession.id) {
+      return;
+    }
+
+    setIsRaspberryLoading(true);
+    setRaspberryError(null);
+
+    try {
+      const command = await startRaspberryRecording(
+        raspberryDeviceId,
+        activeSession.id,
+      );
+      setRaspberryCommand(command);
+    } catch (startError) {
+      setRaspberryError(getRaspberryErrorMessage(startError));
+    } finally {
+      setIsRaspberryLoading(false);
+    }
+  }, [activeSession.id, raspberryDeviceId]);
 
   const hintPanel = (
     <HintPanel
@@ -67,7 +196,6 @@ export function ChatPage() {
       isThinking={isThinking}
       onComplete={completeSession}
       onRequestHint={requestHint}
-      stageIndex={stageIndex}
     />
   );
 
@@ -92,14 +220,33 @@ export function ChatPage() {
               </div>
             </div>
 
-            <Button
-              type="button"
-              onClick={() => setIsHintOpen(true)}
-              className="h-9 gap-2 bg-[#FECA43] px-3 font-bold text-[#2E2A22] hover:bg-[#F5B522] lg:hidden"
-            >
-              <Lightbulb className="size-4" aria-hidden="true" />
-              힌트
-            </Button>
+            <div className="flex shrink-0 items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                title={raspberryButtonLabel}
+                aria-label={raspberryButtonLabel}
+                disabled={isRaspberryButtonDisabled}
+                onClick={() => void handleStartRaspberry()}
+                className="h-9 gap-2 border-[#E7DDC8] bg-white px-2.5 font-bold text-[#4A4438] hover:bg-[#FFF7E0] dark:border-white/10 dark:bg-[#24211D] dark:text-gray-200 dark:hover:bg-[#2A251D]"
+              >
+                {isRaspberryLoading || isRaspberryCommandActive ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Mic className="size-4" aria-hidden="true" />
+                )}
+                <span className="hidden sm:inline">{raspberryButtonLabel}</span>
+              </Button>
+
+              <Button
+                type="button"
+                onClick={() => setIsHintOpen(true)}
+                className="h-9 gap-2 bg-[#FECA43] px-3 font-bold text-[#2E2A22] hover:bg-[#F5B522] lg:hidden"
+              >
+                <Lightbulb className="size-4" aria-hidden="true" />
+                힌트
+              </Button>
+            </div>
           </header>
 
           <ScrollArea className="min-h-0 flex-1">
@@ -137,6 +284,13 @@ export function ChatPage() {
                     <RefreshCw className="size-4" />
                     다시 시도
                   </Button>
+                </div>
+              )}
+
+              {raspberryError && (
+                <div className="mx-auto flex max-w-3xl items-start gap-2 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-200">
+                  <AlertCircle className="mt-0.5 size-4 shrink-0" />
+                  <p className="min-w-0 break-keep">{raspberryError}</p>
                 </div>
               )}
 
@@ -204,7 +358,6 @@ export function ChatPage() {
               onComplete={completeSession}
               onRequestHint={requestHint}
               showHeader={false}
-              stageIndex={stageIndex}
             />
           </div>
         </SheetContent>

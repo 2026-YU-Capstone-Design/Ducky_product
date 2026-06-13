@@ -1,6 +1,7 @@
 package com.rubberduck.domain.chat.service;
 
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -68,7 +69,7 @@ public class ChatService {
     public ChatTurnResponse sendMessage(User user, Long conversationId, String messageText, String inputType) {
         Conversation conversation = getConversationEntity(conversationId);
         ensureOwner(conversation, user);
-        return appendUserTurn(user, conversation, messageText, inputType);
+        return appendUserTurn(user, conversation, messageText, inputType, null);
     }
 
     @Transactional
@@ -77,7 +78,8 @@ public class ChatService {
             String deviceSerial,
             Long conversationId,
             String messageText,
-            String inputType
+            String inputType,
+            Map<String, String> learningType
     ) {
         Device device = deviceService.findOrCreateBySerial(deviceSerial);
         Conversation conversation;
@@ -99,7 +101,7 @@ public class ChatService {
             conversation.setDevice(device);
         }
 
-        return appendUserTurn(user, conversation, messageText, inputType == null ? "voice" : inputType);
+        return appendUserTurn(user, conversation, messageText, inputType == null ? "voice" : inputType, learningType);
     }
 
     @Transactional
@@ -131,9 +133,16 @@ public class ChatService {
         }
     }
 
-    private ChatTurnResponse appendUserTurn(User user, Conversation conversation, String messageText, String inputType) {
+    private ChatTurnResponse appendUserTurn(
+            User user,
+            Conversation conversation,
+            String messageText,
+            String inputType,
+            Map<String, String> learningType
+    ) {
         String normalizedText = requireText(messageText);
         boolean completion = isCompletionText(normalizedText);
+        List<ChatMessage> conversationHistory = chatMessageRepository.findByConversationOrderBySequenceNoAsc(conversation);
         int userSequence = conversation.getMessageCount() + 1;
 
         ChatMessage userMessage = ChatMessage.create(
@@ -153,8 +162,8 @@ public class ChatService {
                 ? ""
                 : documentService.toPromptContext(documentService.searchResults(user, normalizedText, 3));
         AiReply aiReply = completion
-                ? new AiReply(chatResponseService.generateCompletionFeedback(user, conversation), "feedback")
-                : chatResponseService.generateTurn(normalizedText, user, documentContext);
+                ? new AiReply(chatResponseService.generateCompletionFeedback(user, conversation, conversationHistory), "feedback")
+                : chatResponseService.generateTurn(normalizedText, user, documentContext, conversationHistory, learningType);
 
         ChatMessage aiMessage = ChatMessage.create(
                 conversation,
@@ -186,12 +195,16 @@ public class ChatService {
         Conversation conversation = getConversationEntity(conversationId);
         ensureOwner(conversation, user);
 
+        List<ChatMessage> conversationHistory = chatMessageRepository.findByConversationOrderBySequenceNoAsc(conversation);
+        List<ChatMessage> previousHints = conversationHistory.stream()
+                .filter(message -> "hint".equals(message.getMessageType()))
+                .toList();
         int hintNumber = conversation.getHintCount() + 1;
         int hintLevel = Math.min(((hintNumber - 1) / 2) + 1, 3);
         ChatMessage hintMessage = ChatMessage.create(
                 conversation,
                 "assistant",
-                chatResponseService.generateHint(conversation, hintNumber),
+                chatResponseService.generateHint(user, conversation, hintNumber, conversationHistory, previousHints),
                 "hint",
                 "system",
                 conversation.getMessageCount() + 1
@@ -217,10 +230,11 @@ public class ChatService {
             conversation.complete();
         }
 
+        List<ChatMessage> conversationHistory = chatMessageRepository.findByConversationOrderBySequenceNoAsc(conversation);
         ChatMessage feedbackMessage = ChatMessage.create(
                 conversation,
                 "assistant",
-                chatResponseService.generateCompletionFeedback(user, conversation),
+                chatResponseService.generateCompletionFeedback(user, conversation, conversationHistory),
                 "feedback",
                 "system",
                 conversation.getMessageCount() + 1

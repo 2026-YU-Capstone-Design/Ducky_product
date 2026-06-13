@@ -2,10 +2,15 @@ package com.rubberduck.domain.iot.controller;
 
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.rubberduck.domain.device.service.DeviceCommandService;
+import com.rubberduck.domain.iot.dto.IotCommandCompleteRequest;
 import com.rubberduck.domain.iot.dto.IotErrorRequest;
+import com.rubberduck.domain.iot.dto.IotNextCommandRequest;
+import com.rubberduck.domain.iot.dto.IotNextCommandResponse;
 import com.rubberduck.domain.iot.dto.IotResultResponse;
 import com.rubberduck.domain.iot.dto.IotStateRequest;
 import com.rubberduck.domain.iot.dto.IotSttResultRequest;
@@ -21,6 +26,7 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class IotController {
 
+    private final DeviceCommandService deviceCommandService;
     private final IotService iotService;
 
     @PostMapping("/state")
@@ -50,6 +56,22 @@ public class IotController {
     @PostMapping("/error")
     public ApiResponse<IotResultResponse> error(@RequestBody IotErrorRequest request) {
         iotService.saveError(request.deviceId(), request.errorCode(), request.errorMessage());
+        return ApiResponse.ok(new IotResultResponse(true));
+    }
+
+    @PostMapping("/commands/next")
+    public ApiResponse<IotNextCommandResponse> nextCommand(@RequestBody IotNextCommandRequest request) {
+        return ApiResponse.ok(deviceCommandService.claimNext(request.deviceId())
+                .map(IotNextCommandResponse::from)
+                .orElseGet(IotNextCommandResponse::none));
+    }
+
+    @PostMapping("/commands/{commandId}/complete")
+    public ApiResponse<IotResultResponse> completeCommand(
+            @PathVariable Long commandId,
+            @RequestBody IotCommandCompleteRequest request
+    ) {
+        deviceCommandService.complete(commandId, request.deviceId(), request.success(), request.errorMessage());
         return ApiResponse.ok(new IotResultResponse(true));
     }
 }

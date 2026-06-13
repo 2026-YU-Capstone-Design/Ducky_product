@@ -5,6 +5,7 @@ from typing import Any
 import requests
 
 from config import (
+    COMMAND_POLL_SECONDS,
     DEVICE_ID,
     IOT_EVENT_TIMEOUT_SECONDS,
     IOT_FAILURE_BACKOFF_SECONDS,
@@ -117,7 +118,55 @@ def report_iot_error(error_code: str, error_message: str) -> bool:
     )
 
 
-def send_message_to_server(user_text: str) -> dict[str, Any]:
+def fetch_next_command() -> dict[str, Any] | None:
+    """
+    Claim the next pending server command for this device.
+    """
+    try:
+        response = requests.post(
+            _url("/api/iot/commands/next"),
+            json={"device_id": DEVICE_ID},
+            timeout=max(IOT_EVENT_TIMEOUT_SECONDS, COMMAND_POLL_SECONDS),
+        )
+        response.raise_for_status()
+        payload = response.json()
+    except (requests.RequestException, ValueError) as exc:
+        logger.info("Command poll failed: %s", exc)
+        return None
+
+    data = payload.get("data") if isinstance(payload, dict) and "data" in payload else payload
+    if not isinstance(data, dict) or not data.get("available"):
+        return None
+
+    return data
+
+
+def complete_command(command_id: int, success: bool, error_message: str | None = None) -> bool:
+    """
+    Report command completion to the server.
+    """
+    payload: dict[str, Any] = {
+        "device_id": DEVICE_ID,
+        "success": success,
+    }
+    if error_message:
+        payload["errorMessage"] = error_message[:500]
+
+    try:
+        response = requests.post(
+            _url(f"/api/iot/commands/{command_id}/complete"),
+            json=payload,
+            timeout=IOT_EVENT_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+    except requests.RequestException:
+        logger.warning("Command completion report failed", exc_info=True)
+        return False
+
+    return True
+
+
+def send_message_to_server(user_text: str, conversation_id: int | None = None) -> dict[str, Any]:
     """
     Send transcribed user text to the Spring Boot server and return JSON.
     """
@@ -128,6 +177,8 @@ def send_message_to_server(user_text: str) -> dict[str, Any]:
         "message": user_text,
         "learningType": LEARNING_TYPE,
     }
+    if conversation_id is not None:
+        payload["conversationId"] = conversation_id
 
     try:
         response = requests.post(

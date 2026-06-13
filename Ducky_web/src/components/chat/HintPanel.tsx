@@ -6,13 +6,6 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { HintRecord } from "@/types/chat";
 
-const learningStages = [
-  "문제 말하기",
-  "조건 좁히기",
-  "원인 설명",
-  "정리하기",
-];
-
 interface HintPanelProps {
   activeTitle: string;
   activeTopic: string;
@@ -24,7 +17,6 @@ interface HintPanelProps {
   onComplete: () => void;
   onRequestHint: () => void;
   showHeader?: boolean;
-  stageIndex: number;
 }
 
 export function HintPanel({
@@ -38,7 +30,6 @@ export function HintPanel({
   onComplete,
   onRequestHint,
   showHeader = true,
-  stageIndex,
 }: HintPanelProps) {
   return (
     <div
@@ -73,51 +64,11 @@ export function HintPanel({
                 {activeTitle}
               </p>
               <p className="mt-2 text-sm leading-relaxed text-gray-600 break-keep dark:text-gray-400">
-                답을 바로 찾기보다, 개념을 스스로 설명할 수 있게 질문의
-                단계를 좁혀갑니다.
+                현재 대화 흐름을 기준으로, 막힌 지점에 필요한 단서만
+                짧게 이어갑니다.
               </p>
             </div>
           </div>
-        </section>
-
-        <section>
-          <h3 className="text-sm font-bold">질문 단계</h3>
-          <ol className="mt-3 space-y-2">
-            {learningStages.map((stage, index) => {
-              const isDone = index < stageIndex;
-              const isActive = index === stageIndex;
-
-              return (
-                <li
-                  key={stage}
-                  aria-current={isActive ? "step" : undefined}
-                  className={cn(
-                    "flex items-center gap-3 rounded-lg border border-[#E7DDC8] px-3 py-2 text-sm transition-colors dark:border-white/10",
-                    isActive &&
-                      "border-[#FECA43] bg-[#FFF7E0] dark:border-[#FECA43]/70 dark:bg-[#2A251D]",
-                    isDone && "bg-white dark:bg-[#24211D]",
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "flex size-6 shrink-0 items-center justify-center rounded-full border text-xs font-bold",
-                      isDone &&
-                        "border-[#FECA43] bg-[#FECA43] text-[#2E2A22]",
-                      isActive &&
-                        "border-[#B88700] bg-white text-[#B88700] dark:bg-[#1D1B18] dark:text-[#FECA43]",
-                    )}
-                  >
-                    {isDone ? (
-                      <Check className="size-3" aria-hidden="true" />
-                    ) : (
-                      index + 1
-                    )}
-                  </span>
-                  <span className="font-medium">{stage}</span>
-                </li>
-              );
-            })}
-          </ol>
         </section>
 
         <section>
@@ -164,9 +115,6 @@ export function HintPanel({
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-xs font-semibold text-[#B88700]">
                       힌트 {hint.number}
-                    </p>
-                    <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
-                      {hint.title}
                     </p>
                   </div>
                   <p className="mt-2 text-sm leading-relaxed text-gray-700 break-keep dark:text-gray-300">

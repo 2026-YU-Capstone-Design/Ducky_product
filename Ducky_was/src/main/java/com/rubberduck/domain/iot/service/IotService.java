@@ -39,7 +39,7 @@ public class IotService {
         event.setSttSuccess(true);
         iotEventRepository.save(event);
 
-        return chatService.sendDeviceMessage(userId, deviceId, conversationId, sttText, "voice");
+        return chatService.sendDeviceMessage(userId, deviceId, conversationId, sttText, "voice", null);
     }
 
     @Transactional
