@@ -110,8 +110,8 @@ export function ChatInput({
         <Textarea
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          placeholder="질문하거나, 자료를 붙여 같이 물어보세요."
-          className="max-h-32 min-h-11 resize-none border-[#E7DDC8] bg-white px-4 py-3 text-sm shadow-sm focus-visible:border-[#FECA43] focus-visible:ring-[#FECA43]/30 dark:border-white/10 dark:bg-[#1D1B18] dark:text-white dark:shadow-none dark:placeholder:text-gray-500"
+          placeholder="질문하거나 자료 붙이기"
+          className="min-w-0 flex-1 max-h-32 min-h-11 resize-none border-[#E7DDC8] bg-white px-4 py-3 text-sm shadow-sm focus-visible:border-[#FECA43] focus-visible:ring-[#FECA43]/30 dark:border-white/10 dark:bg-[#1D1B18] dark:text-white dark:shadow-none dark:placeholder:text-gray-500"
           disabled={disabled}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) {
