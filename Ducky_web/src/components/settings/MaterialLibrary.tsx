@@ -41,7 +41,7 @@ import type {
 } from "@/types/material";
 
 const ACCEPTED_FILE_TYPES =
-  ".pdf,.txt,.md,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg,.csv,.json";
+  ".pdf,.docx,.pptx,.txt,.md,.csv,.json";
 
 const sourceLabels: Record<LearningMaterialSource, string> = {
   chat: "대화 첨부",
@@ -372,7 +372,7 @@ export function MaterialLibrary() {
                   직접 자료 추가
                 </h3>
                 <p className="mt-1 text-sm leading-relaxed text-gray-500 break-keep dark:text-gray-400">
-                  txt, md, csv, json 파일은 바로 텍스트 chunk로 저장됩니다.
+                  pdf, docx, pptx, txt, md, csv, json 파일은 텍스트 chunk로 저장됩니다.
                 </p>
               </div>
             </div>

@@ -18,7 +18,8 @@ interface ChatInputProps {
   voiceStatusLabel: string;
 }
 
-const ACCEPTED_ATTACHMENT_TYPES = ".pdf,.txt,.md,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg,.csv,.json";
+const ACCEPTED_ATTACHMENT_TYPES =
+  ".pdf,.docx,.pptx,.txt,.md,.csv,.json";
 
 export function ChatInput({
   disabled,
