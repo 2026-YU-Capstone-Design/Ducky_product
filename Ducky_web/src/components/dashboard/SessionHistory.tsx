@@ -177,6 +177,8 @@ export function SessionHistory() {
   const [filter, setFilter] = useState<SessionFilter>("all");
   const {
     counts,
+    deleteSession,
+    deletingSessionId,
     error,
     isLoading,
     isLoadingDetail,
@@ -296,7 +298,9 @@ export function SessionHistory() {
         {filteredSessions.map((session) => (
           <SessionCard
             key={session.id}
+            isDeleting={deletingSessionId === session.id}
             isSelected={selectedSession?.id === session.id}
+            onDelete={(nextSession) => void deleteSession(nextSession)}
             onSelect={(nextSession) => void selectSession(nextSession)}
             session={session}
           />

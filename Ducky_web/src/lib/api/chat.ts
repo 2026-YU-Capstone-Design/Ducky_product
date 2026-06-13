@@ -108,3 +108,10 @@ export function endConversation(conversationId: string) {
     },
   );
 }
+
+export function deleteConversation(conversationId: string) {
+  return apiRequest<void>(`/api/chat/conversations/${conversationId}`, {
+    method: "DELETE",
+    auth: true,
+  });
+}

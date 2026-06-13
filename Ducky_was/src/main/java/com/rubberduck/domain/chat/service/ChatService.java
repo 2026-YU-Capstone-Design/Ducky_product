@@ -251,6 +251,14 @@ public class ChatService {
         );
     }
 
+    @Transactional
+    public void deleteConversation(User user, Long conversationId) {
+        Conversation conversation = getConversationEntity(conversationId);
+        ensureOwner(conversation, user);
+        chatMessageRepository.deleteByConversation(conversation);
+        conversationRepository.delete(conversation);
+    }
+
     private Conversation getConversationEntity(Long conversationId) {
         if (conversationId == null) {
             throw new CustomException(ErrorCode.INVALID_REQUEST);

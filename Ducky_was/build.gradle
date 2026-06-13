@@ -30,6 +30,8 @@ dependencies {
 
     // OpenAI
     implementation 'com.openai:openai-java:2.1.0'
+    implementation 'org.apache.pdfbox:pdfbox:3.0.2'
+    implementation 'org.apache.poi:poi-ooxml:5.2.5'
 
     // HTTP 클라이언트 (OpenAI API 호출용)
     implementation 'org.springframework.boot:spring-boot-starter-webflux'

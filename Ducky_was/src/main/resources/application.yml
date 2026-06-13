@@ -11,7 +11,7 @@ spring:
   jpa:
     open-in-view: false
     hibernate:
-      ddl-auto: create
+      ddl-auto: ${JPA_DDL_AUTO:update}
     show-sql: true
     properties:
       hibernate:
@@ -26,6 +26,12 @@ openai:
   api-key: ${OPENAI_API_KEY:}
   chat-model: ${OPENAI_CHAT_MODEL:gpt-4.1-mini}
   request-timeout-seconds: ${OPENAI_REQUEST_TIMEOUT_SECONDS:30}
+
+oauth:
+  kakao:
+    rest-api-key: ${KAKAO_REST_API_KEY:}
+    client-secret: ${KAKAO_CLIENT_SECRET:}
+    request-timeout-seconds: ${KAKAO_REQUEST_TIMEOUT_SECONDS:10}
 
 security:
   jwt:

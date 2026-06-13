@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getAccessToken } from "@/lib/api/client";
-import { getConversation, listConversations } from "@/lib/api/chat";
+import { deleteConversation, getConversation, listConversations } from "@/lib/api/chat";
 import {
   toSessionDetail,
   toSessionSummary,
@@ -23,6 +23,7 @@ export function useSessionHistory() {
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+  const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -88,6 +89,27 @@ export function useSessionHistory() {
     }
   }, []);
 
+  const deleteSession = useCallback(async (session: Session) => {
+    if (!window.confirm(`"${session.title}" 대화를 삭제할까요?`)) {
+      return;
+    }
+
+    setDeletingSessionId(session.id);
+    setError(null);
+
+    try {
+      await deleteConversation(session.id);
+      setSessions((prev) => prev.filter((item) => item.id !== session.id));
+      setSelectedSession((current) =>
+        current?.id === session.id ? null : current,
+      );
+    } catch (deleteError) {
+      setError(getErrorMessage(deleteError));
+    } finally {
+      setDeletingSessionId(null);
+    }
+  }, []);
+
   const counts = useMemo(
     () => ({
       total: sessions.length,
@@ -102,6 +124,8 @@ export function useSessionHistory() {
 
   return {
     counts,
+    deleteSession,
+    deletingSessionId,
     error,
     isLoading,
     isLoadingDetail,

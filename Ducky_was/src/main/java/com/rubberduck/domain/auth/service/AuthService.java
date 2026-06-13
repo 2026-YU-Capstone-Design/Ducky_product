@@ -1,14 +1,19 @@
 package com.rubberduck.domain.auth.service;
 
 import java.util.Locale;
+import java.util.UUID;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.rubberduck.domain.auth.dto.AuthResponse;
+import com.rubberduck.domain.auth.dto.KakaoLoginRequest;
 import com.rubberduck.domain.auth.dto.LoginRequest;
 import com.rubberduck.domain.auth.dto.SignupRequest;
+import com.rubberduck.domain.auth.entity.SocialAccount;
+import com.rubberduck.domain.auth.repository.SocialAccountRepository;
+import com.rubberduck.domain.auth.service.KakaoOAuthClient.KakaoUser;
 import com.rubberduck.domain.user.dto.UserResponse;
 import com.rubberduck.domain.user.entity.User;
 import com.rubberduck.domain.user.repository.UserRepository;
@@ -21,9 +26,14 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class AuthService {
 
+    private static final String KAKAO_PROVIDER = "kakao";
+    private static final String SOCIAL_EMAIL_DOMAIN = "social.ducky.local";
+
     private final UserRepository userRepository;
+    private final SocialAccountRepository socialAccountRepository;
     private final PasswordEncoder passwordEncoder;
     private final AuthTokenService authTokenService;
+    private final KakaoOAuthClient kakaoOAuthClient;
 
     @Transactional(readOnly = true)
     public boolean isEmailAvailable(String email) {
@@ -69,6 +79,19 @@ public class AuthService {
         return toAuthResponse(user);
     }
 
+    @Transactional
+    public AuthResponse kakaoLogin(KakaoLoginRequest request) {
+        String code = required(request.code());
+        String redirectUri = required(request.redirectUri());
+        KakaoUser kakaoUser = kakaoOAuthClient.fetchUser(code, redirectUri);
+        String providerUserId = required(kakaoUser.providerUserId());
+
+        return socialAccountRepository.findByProviderAndProviderUserId(KAKAO_PROVIDER, providerUserId)
+                .map(SocialAccount::getUser)
+                .map(this::toAuthResponse)
+                .orElseGet(() -> createKakaoAuthResponse(kakaoUser, providerUserId));
+    }
+
     @Transactional(readOnly = true)
     public User requireUser(String authorizationHeader) {
         Long userId = authTokenService.parseUserId(authorizationHeader)
@@ -79,6 +102,46 @@ public class AuthService {
 
     private AuthResponse toAuthResponse(User user) {
         return new AuthResponse(authTokenService.issue(user.getId()), UserResponse.from(user));
+    }
+
+    private AuthResponse createKakaoAuthResponse(KakaoUser kakaoUser, String providerUserId) {
+        String email = normalizeKakaoEmail(kakaoUser.email(), providerUserId);
+        User user = userRepository.findByEmail(email)
+                .orElseGet(() -> userRepository.save(User.create(
+                        normalizeName(kakaoUser.nickname(), "Kakao User"),
+                        email,
+                        uniqueLoginId("kakao_" + normalizeSocialId(providerUserId)),
+                        passwordEncoder.encode(UUID.randomUUID().toString())
+                )));
+        socialAccountRepository.save(SocialAccount.create(user, KAKAO_PROVIDER, providerUserId, email));
+        return toAuthResponse(user);
+    }
+
+    private String normalizeKakaoEmail(String email, String providerUserId) {
+        if (email != null && !email.isBlank() && email.contains("@")) {
+            return email.trim().toLowerCase(Locale.ROOT);
+        }
+        return "kakao_" + normalizeSocialId(providerUserId) + "@" + SOCIAL_EMAIL_DOMAIN;
+    }
+
+    private String normalizeSocialId(String providerUserId) {
+        String normalized = required(providerUserId).replaceAll("[^a-zA-Z0-9]", "").toLowerCase(Locale.ROOT);
+        if (normalized.isBlank()) {
+            throw new CustomException(ErrorCode.INVALID_REQUEST);
+        }
+        return normalized;
+    }
+
+    private String uniqueLoginId(String baseLoginId) {
+        String base = trimToLength(baseLoginId, 80);
+        String candidate = base;
+        int suffix = 1;
+        while (userRepository.existsByLoginId(candidate)) {
+            String suffixText = "_" + suffix;
+            candidate = trimToLength(base, 80 - suffixText.length()) + suffixText;
+            suffix++;
+        }
+        return candidate;
     }
 
     private String normalizeEmail(String email) {
@@ -97,6 +160,13 @@ public class AuthService {
             return name.trim();
         }
         return fallback;
+    }
+
+    private String trimToLength(String value, int maxLength) {
+        if (value.length() <= maxLength) {
+            return value;
+        }
+        return value.substring(0, maxLength);
     }
 
     private String required(String value) {
