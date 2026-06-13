@@ -49,7 +49,7 @@ type SpeechRecognitionWindow = Window & {
 };
 
 const statusLabels: Record<VoiceInputStatus, string> = {
-  idle: "음성 입력",
+  idle: "Ducky와 대화하기",
   listening: "듣는 중",
   transcribing: "텍스트 변환 중",
   thinking: "문장 정리 중",

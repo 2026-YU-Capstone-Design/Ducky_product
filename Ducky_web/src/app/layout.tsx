@@ -28,6 +28,14 @@ export const metadata: Metadata = {
   title: "Ducky",
   description: "AI 러버덕 학습 도우미",
   manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/icons/ducky-character-192.png", type: "image/png", sizes: "192x192" },
+      { url: "/icons/ducky-character-512.png", type: "image/png", sizes: "512x512" },
+    ],
+    apple: [{ url: "/icons/ducky-character-512.png", sizes: "512x512" }],
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertCircle, Bot, Lightbulb, Loader2, Mic, RefreshCw } from "lucide-react";
 import { Comfortaa } from "next/font/google";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -205,8 +206,15 @@ export function ChatPage() {
         <section className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#FAF8F5] transition-colors dark:bg-[#171512] sm:rounded-lg sm:border sm:border-[#E7DDC8] sm:bg-white sm:shadow-sm sm:dark:border-white/10 sm:dark:bg-[#201D19] sm:dark:shadow-none">
           <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[#E7DDC8] bg-[#FAF8F5] px-4 py-3 transition-colors dark:border-white/10 dark:bg-[#201D19] sm:bg-white lg:px-5">
             <div className="flex min-w-0 items-center gap-3">
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-[#FECA43] text-[#2E2A22]">
-                <Bot className="size-5" aria-hidden="true" />
+              <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[#FECA43]">
+                <Image
+                  src="/icons/ducky-character.png"
+                  alt=""
+                  width={40}
+                  height={40}
+                  className="size-10 scale-[1.15] object-contain"
+                  aria-hidden="true"
+                />
               </div>
               <div className="min-w-0">
                 <h1
