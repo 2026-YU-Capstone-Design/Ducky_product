@@ -10,10 +10,12 @@ import org.springframework.transaction.annotation.Transactional;
 import com.rubberduck.domain.auth.dto.AuthResponse;
 import com.rubberduck.domain.auth.dto.KakaoLoginRequest;
 import com.rubberduck.domain.auth.dto.LoginRequest;
+import com.rubberduck.domain.auth.dto.NaverLoginRequest;
 import com.rubberduck.domain.auth.dto.SignupRequest;
 import com.rubberduck.domain.auth.entity.SocialAccount;
 import com.rubberduck.domain.auth.repository.SocialAccountRepository;
 import com.rubberduck.domain.auth.service.KakaoOAuthClient.KakaoUser;
+import com.rubberduck.domain.auth.service.NaverOAuthClient.NaverUser;
 import com.rubberduck.domain.user.dto.UserResponse;
 import com.rubberduck.domain.user.entity.User;
 import com.rubberduck.domain.user.repository.UserRepository;
@@ -27,6 +29,7 @@ import lombok.RequiredArgsConstructor;
 public class AuthService {
 
     private static final String KAKAO_PROVIDER = "kakao";
+    private static final String NAVER_PROVIDER = "naver";
     private static final String SOCIAL_EMAIL_DOMAIN = "social.ducky.local";
 
     private final UserRepository userRepository;
@@ -34,6 +37,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final AuthTokenService authTokenService;
     private final KakaoOAuthClient kakaoOAuthClient;
+    private final NaverOAuthClient naverOAuthClient;
 
     @Transactional(readOnly = true)
     public boolean isEmailAvailable(String email) {
@@ -88,8 +92,36 @@ public class AuthService {
 
         return socialAccountRepository.findByProviderAndProviderUserId(KAKAO_PROVIDER, providerUserId)
                 .map(SocialAccount::getUser)
+                .map(user -> syncSocialProfile(user, kakaoUser.nickname(), "Kakao User"))
                 .map(this::toAuthResponse)
-                .orElseGet(() -> createKakaoAuthResponse(kakaoUser, providerUserId));
+                .orElseGet(() -> createSocialAuthResponse(
+                        KAKAO_PROVIDER,
+                        providerUserId,
+                        kakaoUser.email(),
+                        kakaoUser.nickname(),
+                        "Kakao User"
+                ));
+    }
+
+    @Transactional
+    public AuthResponse naverLogin(NaverLoginRequest request) {
+        String code = required(request.code());
+        String state = required(request.state());
+        String redirectUri = required(request.redirectUri());
+        NaverUser naverUser = naverOAuthClient.fetchUser(code, state, redirectUri);
+        String providerUserId = required(naverUser.providerUserId());
+
+        return socialAccountRepository.findByProviderAndProviderUserId(NAVER_PROVIDER, providerUserId)
+                .map(SocialAccount::getUser)
+                .map(user -> syncSocialProfile(user, naverUser.nickname(), "Naver User"))
+                .map(this::toAuthResponse)
+                .orElseGet(() -> createSocialAuthResponse(
+                        NAVER_PROVIDER,
+                        providerUserId,
+                        naverUser.email(),
+                        naverUser.nickname(),
+                        "Naver User"
+                ));
     }
 
     @Transactional(readOnly = true)
@@ -104,24 +136,42 @@ public class AuthService {
         return new AuthResponse(authTokenService.issue(user.getId()), UserResponse.from(user));
     }
 
-    private AuthResponse createKakaoAuthResponse(KakaoUser kakaoUser, String providerUserId) {
-        String email = normalizeKakaoEmail(kakaoUser.email(), providerUserId);
+    private AuthResponse createSocialAuthResponse(
+            String provider,
+            String providerUserId,
+            String providerEmail,
+            String nickname,
+            String fallbackName
+    ) {
+        String email = normalizeSocialEmail(provider, providerEmail, providerUserId);
         User user = userRepository.findByEmail(email)
                 .orElseGet(() -> userRepository.save(User.create(
-                        normalizeName(kakaoUser.nickname(), "Kakao User"),
+                        normalizeName(nickname, fallbackName),
                         email,
-                        uniqueLoginId("kakao_" + normalizeSocialId(providerUserId)),
+                        uniqueLoginId(provider + "_" + normalizeSocialId(providerUserId)),
                         passwordEncoder.encode(UUID.randomUUID().toString())
                 )));
-        socialAccountRepository.save(SocialAccount.create(user, KAKAO_PROVIDER, providerUserId, email));
+        socialAccountRepository.save(SocialAccount.create(user, provider, providerUserId, email));
         return toAuthResponse(user);
     }
 
-    private String normalizeKakaoEmail(String email, String providerUserId) {
+    private User syncSocialProfile(User user, String nickname, String fallbackName) {
+        if (hasSocialFallbackName(user, fallbackName) && nickname != null && !nickname.isBlank()) {
+            user.setName(nickname.trim());
+        }
+        return user;
+    }
+
+    private boolean hasSocialFallbackName(User user, String fallbackName) {
+        String name = user.getName();
+        return name == null || name.isBlank() || fallbackName.equals(name);
+    }
+
+    private String normalizeSocialEmail(String provider, String email, String providerUserId) {
         if (email != null && !email.isBlank() && email.contains("@")) {
             return email.trim().toLowerCase(Locale.ROOT);
         }
-        return "kakao_" + normalizeSocialId(providerUserId) + "@" + SOCIAL_EMAIL_DOMAIN;
+        return provider + "_" + normalizeSocialId(providerUserId) + "@" + SOCIAL_EMAIL_DOMAIN;
     }
 
     private String normalizeSocialId(String providerUserId) {

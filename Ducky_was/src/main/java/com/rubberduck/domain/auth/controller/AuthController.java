@@ -11,6 +11,7 @@ import com.rubberduck.domain.auth.dto.AuthResponse;
 import com.rubberduck.domain.auth.dto.EmailAvailabilityResponse;
 import com.rubberduck.domain.auth.dto.KakaoLoginRequest;
 import com.rubberduck.domain.auth.dto.LoginRequest;
+import com.rubberduck.domain.auth.dto.NaverLoginRequest;
 import com.rubberduck.domain.auth.dto.SignupRequest;
 import com.rubberduck.domain.auth.service.AuthService;
 import com.rubberduck.global.response.ApiResponse;
@@ -37,6 +38,11 @@ public class AuthController {
     @PostMapping("/oauth/kakao")
     public ApiResponse<AuthResponse> kakaoLogin(@RequestBody KakaoLoginRequest request) {
         return ApiResponse.ok(authService.kakaoLogin(request));
+    }
+
+    @PostMapping("/oauth/naver")
+    public ApiResponse<AuthResponse> naverLogin(@RequestBody NaverLoginRequest request) {
+        return ApiResponse.ok(authService.naverLogin(request));
     }
 
     @GetMapping("/email-available")

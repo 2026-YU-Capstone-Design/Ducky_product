@@ -42,6 +42,12 @@ interface KakaoLoginPayload {
   redirectUri: string;
 }
 
+interface NaverLoginPayload {
+  code: string;
+  redirectUri: string;
+  state: string;
+}
+
 export interface UpdateLearningStylePayload {
   processing: User["learningStyle"]["processing"];
   expression: User["learningStyle"]["expression"];
@@ -98,6 +104,15 @@ export async function signup(payload: SignupPayload) {
 
 export async function loginWithKakao(payload: KakaoLoginPayload) {
   const authResponse = await apiRequest<AuthResponse>("/api/auth/oauth/kakao", {
+    method: "POST",
+    body: payload,
+  });
+
+  return saveAuthResponse(authResponse);
+}
+
+export async function loginWithNaver(payload: NaverLoginPayload) {
+  const authResponse = await apiRequest<AuthResponse>("/api/auth/oauth/naver", {
     method: "POST",
     body: payload,
   });
