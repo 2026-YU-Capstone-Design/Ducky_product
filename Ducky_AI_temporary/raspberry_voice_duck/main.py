@@ -45,7 +45,7 @@ nano_adapter: NanoSerialAdapter | None = None
 def _nano_led_label_for_state(state: LedState) -> str:
     if state in {LedState.RECORDING, LedState.TRANSCRIBING}:
         return "LISTENING"
-    if state in {LedState.THINKING, LedState.SPEAKING, LedState.LOGGING}:
+    if state == LedState.SPEAKING:
         return "RESPONDING"
     if state == LedState.OFFLINE:
         return "OFFLINE"
@@ -131,10 +131,10 @@ def _speak(text: str) -> bool:
 
 
 def run_once(conversation_id: int | None = None) -> bool:
+    _report_state(LedState.RECORDING)
     print("듣고 있어요. 문제를 설명해 주세요.")
     _speak("듣고 있어요. 문제를 설명해 주세요.")
-    
-    _report_state(LedState.RECORDING)
+
     record_audio(INPUT_AUDIO_PATH, duration=RECORD_SECONDS)
 
     stt_success = True
