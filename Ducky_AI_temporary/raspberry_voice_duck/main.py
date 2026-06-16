@@ -40,6 +40,7 @@ from tts import synthesize_speech
 
 logger = logging.getLogger(__name__)
 nano_adapter: NanoSerialAdapter | None = None
+_is_offline_led_active = False
 
 
 def _nano_led_label_for_state(state: LedState) -> str:
@@ -53,18 +54,26 @@ def _nano_led_label_for_state(state: LedState) -> str:
 
 
 def _report_state(state: LedState) -> None:
+    global _is_offline_led_active
     if nano_adapter is not None:
         nano_adapter.send_led_state(_nano_led_label_for_state(state))
+    _is_offline_led_active = state == LedState.OFFLINE
     report_iot_state(state)
 
 
 def _handle_connection_state(online: bool, failed_seconds: float) -> None:
+    global _is_offline_led_active
     if nano_adapter is None:
         return
     if online:
-        nano_adapter.send_led_state("IDLE")
-    elif failed_seconds >= OFFLINE_TIMEOUT_SECONDS:
+        # 정상 통신 복구 시점에는 현재 음성 처리 상태를 덮어쓰지 않는다.
+        # 다음 _report_state 호출에서 자연스럽게 LED가 갱신된다.
+        _is_offline_led_active = False
+        return
+
+    if failed_seconds >= OFFLINE_TIMEOUT_SECONDS and not _is_offline_led_active:
         nano_adapter.send_led_state("OFFLINE")
+        _is_offline_led_active = True
 
 
 def _report_error(error_code: str, error: object) -> None:
