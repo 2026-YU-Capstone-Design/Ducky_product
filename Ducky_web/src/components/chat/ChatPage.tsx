@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertCircle, Bot, Lightbulb, Loader2, Mic, RefreshCw } from "lucide-react";
+import { AlertCircle, Bot, Lightbulb, Loader2, MicOff, RefreshCw } from "lucide-react";
 import { Comfortaa } from "next/font/google";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
@@ -17,10 +17,8 @@ import { useChatSession } from "@/hooks/useChatSession";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
 import {
   DEFAULT_RASPBERRY_SERIAL,
-  getLatestDeviceCommand,
   listDevices,
-  startRaspberryRecording,
-  type DeviceCommandResponse,
+  type DeviceResponse,
 } from "@/lib/api/devices";
 import { ChatBubble } from "./ChatBubble";
 import { ChatInput } from "./ChatInput";
@@ -43,10 +41,8 @@ export function ChatPage() {
   const [draft, setDraft] = useState("");
   const [isHintOpen, setIsHintOpen] = useState(false);
   const [raspberryDeviceId, setRaspberryDeviceId] = useState<string | null>(null);
-  const [raspberryCommand, setRaspberryCommand] =
-    useState<DeviceCommandResponse | null>(null);
+  const [raspberryDeviceStatus, setRaspberryDeviceStatus] = useState<string | null>(null);
   const [raspberryError, setRaspberryError] = useState<string | null>(null);
-  const [isRaspberryLoading, setIsRaspberryLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const chat = useChatSession();
   const {
@@ -72,21 +68,19 @@ export function ChatPage() {
   const voice = useVoiceInput({
     onTranscript: handleTranscript,
   });
-  const isRaspberryCommandActive =
-    raspberryCommand?.status === "PENDING" || raspberryCommand?.status === "CLAIMED";
-  const raspberryButtonLabel = !raspberryDeviceId
+  const raspberryStatusLabel = !raspberryDeviceId
     ? "라즈베리 없음"
-    : isRaspberryLoading
-      ? "요청 중"
-      : raspberryCommand?.status === "PENDING"
-        ? "대기 중"
-        : raspberryCommand?.status === "CLAIMED"
-          ? "녹음 중"
-          : "Ducky와 대화하기";
+    : raspberryDeviceStatus === "OFFLINE"
+        ? "오프라인"
+        : raspberryDeviceStatus === "RECORDING" || raspberryDeviceStatus === "TRANSCRIBING"
+          ? "응답 받는 중"
+          : raspberryDeviceStatus === "THINKING" ||
+              raspberryDeviceStatus === "SPEAKING" ||
+              raspberryDeviceStatus === "LOGGING"
+            ? "응답 중"
+            : "대기 중";
   const isRaspberryButtonDisabled =
     !raspberryDeviceId ||
-    isRaspberryLoading ||
-    isRaspberryCommandActive ||
     isThinking ||
     isCompleted ||
     isLoadingSession ||
@@ -112,15 +106,10 @@ export function ChatPage() {
           (device) => device.serialNumber === DEFAULT_RASPBERRY_SERIAL,
         );
         setRaspberryDeviceId(raspberry?.id ?? null);
+        setRaspberryDeviceStatus(raspberry?.status ?? null);
 
         if (!raspberry) {
-          setRaspberryCommand(null);
           return;
-        }
-
-        const latestCommand = await getLatestDeviceCommand(raspberry.id);
-        if (!cancelled) {
-          setRaspberryCommand(latestCommand);
         }
       } catch (deviceError) {
         if (!cancelled) {
@@ -137,26 +126,18 @@ export function ChatPage() {
   }, [isReady]);
 
   useEffect(() => {
-    if (!raspberryDeviceId || !isRaspberryCommandActive) {
+    if (!raspberryDeviceId) {
       return;
     }
 
     const timer = window.setInterval(() => {
-      void getLatestDeviceCommand(raspberryDeviceId)
-        .then((latestCommand) => {
-          setRaspberryCommand(latestCommand);
-
-          if (latestCommand?.status === "COMPLETED") {
-            setRaspberryError(null);
-            void retry();
-          }
-          if (latestCommand?.status === "FAILED") {
-            setRaspberryError(
-              latestCommand.errorMessage ||
-                "라즈베리 녹음 명령이 실패했습니다. 다시 시도해 주세요.",
-            );
-            void retry();
-          }
+      void listDevices()
+        .then((devices) => {
+          const raspberry = devices.find(
+            (device: DeviceResponse) => device.id === raspberryDeviceId,
+          );
+          setRaspberryDeviceStatus(raspberry?.status ?? null);
+          setRaspberryError(null);
         })
         .catch((pollError) => {
           setRaspberryError(getRaspberryErrorMessage(pollError));
@@ -164,28 +145,7 @@ export function ChatPage() {
     }, 1500);
 
     return () => window.clearInterval(timer);
-  }, [isRaspberryCommandActive, raspberryDeviceId, retry]);
-
-  const handleStartRaspberry = useCallback(async () => {
-    if (!raspberryDeviceId || !activeSession.id) {
-      return;
-    }
-
-    setIsRaspberryLoading(true);
-    setRaspberryError(null);
-
-    try {
-      const command = await startRaspberryRecording(
-        raspberryDeviceId,
-        activeSession.id,
-      );
-      setRaspberryCommand(command);
-    } catch (startError) {
-      setRaspberryError(getRaspberryErrorMessage(startError));
-    } finally {
-      setIsRaspberryLoading(false);
-    }
-  }, [activeSession.id, raspberryDeviceId]);
+  }, [raspberryDeviceId]);
 
   const hintPanel = (
     <HintPanel
@@ -232,18 +192,14 @@ export function ChatPage() {
               <Button
                 type="button"
                 variant="outline"
-                title={raspberryButtonLabel}
-                aria-label={raspberryButtonLabel}
+                title={`하드웨어 버튼 사용 (${raspberryStatusLabel})`}
+                aria-label={`하드웨어 버튼 사용 (${raspberryStatusLabel})`}
                 disabled={isRaspberryButtonDisabled}
-                onClick={() => void handleStartRaspberry()}
+                onClick={() => void retry()}
                 className="h-9 gap-2 border-[#E7DDC8] bg-white px-2.5 font-bold text-[#4A4438] hover:bg-[#FFF7E0] dark:border-white/10 dark:bg-[#24211D] dark:text-gray-200 dark:hover:bg-[#2A251D]"
               >
-                {isRaspberryLoading || isRaspberryCommandActive ? (
-                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                ) : (
-                  <Mic className="size-4" aria-hidden="true" />
-                )}
-                <span className="hidden sm:inline">{raspberryButtonLabel}</span>
+                <MicOff className="size-4" aria-hidden="true" />
+                <span className="hidden sm:inline">{raspberryStatusLabel}</span>
               </Button>
 
               <Button

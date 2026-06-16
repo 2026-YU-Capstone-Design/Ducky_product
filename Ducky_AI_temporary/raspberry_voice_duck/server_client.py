@@ -1,6 +1,6 @@
 import logging
 import time
-from typing import Any
+from typing import Any, Callable
 
 import requests
 
@@ -20,6 +20,9 @@ from led_state import LedState
 
 logger = logging.getLogger(__name__)
 _iot_backoff_until = 0.0
+_connection_state_callback: Callable[[bool, float], None] | None = None
+_last_server_ok_at = time.monotonic()
+_server_online = True
 
 
 class ServerClientError(RuntimeError):
@@ -28,6 +31,36 @@ class ServerClientError(RuntimeError):
 
 def _url(path: str) -> str:
     return f"{SERVER_BASE_URL}{path}"
+
+
+def set_connection_state_callback(callback: Callable[[bool, float], None] | None) -> None:
+    global _connection_state_callback
+    _connection_state_callback = callback
+
+
+def _notify_connection_state(online: bool, failed_seconds: float) -> None:
+    if _connection_state_callback is None:
+        return
+    try:
+        _connection_state_callback(online, failed_seconds)
+    except Exception:
+        logger.warning("Connection state callback failed", exc_info=True)
+
+
+def _mark_server_ok() -> None:
+    global _last_server_ok_at, _server_online
+    _last_server_ok_at = time.monotonic()
+    if not _server_online:
+        _server_online = True
+    _notify_connection_state(True, 0.0)
+
+
+def _mark_server_fail() -> None:
+    global _server_online
+    failed_seconds = max(0.0, time.monotonic() - _last_server_ok_at)
+    if _server_online:
+        _server_online = False
+    _notify_connection_state(False, failed_seconds)
 
 
 def _state_value(state: LedState | str) -> str:
@@ -55,9 +88,11 @@ def _post_iot_event(path: str, payload: dict[str, Any], action: str) -> bool:
         response.raise_for_status()
     except requests.RequestException:
         _iot_backoff_until = time.monotonic() + IOT_FAILURE_BACKOFF_SECONDS
+        _mark_server_fail()
         logger.info("%s failed; telemetry will back off", action, exc_info=True)
         return False
 
+    _mark_server_ok()
     return True
 
 
@@ -71,9 +106,15 @@ def check_server_health() -> bool:
         data = response.json()
     except (requests.RequestException, ValueError) as exc:
         logger.info("Server health check failed: %s", exc)
+        _mark_server_fail()
         return False
 
-    return isinstance(data, dict) and data.get("status") == "ok"
+    is_healthy = isinstance(data, dict) and data.get("status") == "ok"
+    if is_healthy:
+        _mark_server_ok()
+    else:
+        _mark_server_fail()
+    return is_healthy
 
 
 def report_iot_state(state: LedState | str) -> bool:
@@ -132,12 +173,14 @@ def fetch_next_command() -> dict[str, Any] | None:
         payload = response.json()
     except (requests.RequestException, ValueError) as exc:
         logger.info("Command poll failed: %s", exc)
+        _mark_server_fail()
         return None
 
     data = payload.get("data") if isinstance(payload, dict) and "data" in payload else payload
     if not isinstance(data, dict) or not data.get("available"):
         return None
 
+    _mark_server_ok()
     return data
 
 
@@ -161,8 +204,10 @@ def complete_command(command_id: int, success: bool, error_message: str | None =
         response.raise_for_status()
     except requests.RequestException:
         logger.warning("Command completion report failed", exc_info=True)
+        _mark_server_fail()
         return False
 
+    _mark_server_ok()
     return True
 
 
@@ -189,8 +234,10 @@ def send_message_to_server(user_text: str, conversation_id: int | None = None) -
         response.raise_for_status()
         data = response.json()
     except requests.RequestException as exc:
+        _mark_server_fail()
         raise ServerClientError(f"대화 API 요청 실패: {exc}") from exc
     except ValueError as exc:
+        _mark_server_fail()
         raise ServerClientError("대화 API 응답이 JSON 형식이 아닙니다.") from exc
 
     if not isinstance(data, dict):
@@ -200,6 +247,7 @@ def send_message_to_server(user_text: str, conversation_id: int | None = None) -
     if not isinstance(message, str) or not message.strip():
         raise ServerClientError("대화 API 응답에 message가 없습니다.")
 
+    _mark_server_ok()
     return data
 
 
@@ -234,6 +282,8 @@ def save_conversation_log(
         response.raise_for_status()
     except requests.RequestException:
         logger.warning("Conversation log save failed", exc_info=True)
+        _mark_server_fail()
         return False
 
+    _mark_server_ok()
     return True

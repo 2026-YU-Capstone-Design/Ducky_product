@@ -23,10 +23,11 @@ public class IotService {
     @Transactional
     public void saveState(String deviceId, String currentState) {
         Device device = deviceService.findOrCreateBySerial(deviceId);
-        deviceService.updateStatus(device, currentState);
+        String normalizedState = normalizeState(currentState);
+        deviceService.updateStatus(device, normalizedState);
 
         IotEvent event = IotEvent.create("STATE", device.getSerialNumber());
-        event.setCurrentState(currentState);
+        event.setCurrentState(normalizedState);
         iotEventRepository.save(event);
     }
 
@@ -60,6 +61,13 @@ public class IotService {
         event.setErrorCode(errorCode);
         event.setErrorMessage(errorMessage);
         iotEventRepository.save(event);
+    }
+
+    private String normalizeState(String currentState) {
+        if (currentState == null || currentState.isBlank()) {
+            return "UNKNOWN";
+        }
+        return currentState.trim().toUpperCase();
     }
 
     @Transactional
