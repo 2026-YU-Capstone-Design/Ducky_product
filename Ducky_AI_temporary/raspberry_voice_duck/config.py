@@ -60,13 +60,15 @@ LOCAL_WHISPER_COMPUTE_TYPE = _get_str("LOCAL_WHISPER_COMPUTE_TYPE", "int8")
 LOCAL_PIPER_BIN = _get_str("LOCAL_PIPER_BIN", "piper")
 LOCAL_PIPER_MODEL = _get_str(
     "LOCAL_PIPER_MODEL",
-    str(BASE_DIR / "models" / "ko_KR-kss-medium.onnx"),
+    str(BASE_DIR / "models" / "piper-kss-korean.onnx"),
 )
 LOCAL_PIPER_CONFIG = _get_str(
     "LOCAL_PIPER_CONFIG",
-    str(BASE_DIR / "models" / "ko_KR-kss-medium.onnx.json"),
+    str(BASE_DIR / "models" / "piper-kss-korean.onnx.json"),
 )
 LOCAL_ESPEAK_VOICE = _get_str("LOCAL_ESPEAK_VOICE", "ko")
+LOCAL_TTS_ENGINE = _get_str("LOCAL_TTS_ENGINE", "edge").lower()
+LOCAL_EDGE_VOICE = _get_str("LOCAL_EDGE_VOICE", "ko-KR-SunHiNeural")
 
 LANGUAGE = _get_str("LANGUAGE", "ko")
 SERVER_BASE_URL = _get_str("SERVER_BASE_URL", "http://localhost:8080").rstrip("/")
@@ -86,11 +88,16 @@ NANO_SERIAL_TIMEOUT_SECONDS = _get_float("NANO_SERIAL_TIMEOUT_SECONDS", 0.1)
 NANO_RECONNECT_SECONDS = _get_float("NANO_RECONNECT_SECONDS", 2.0)
 OFFLINE_TIMEOUT_SECONDS = _get_float("OFFLINE_TIMEOUT_SECONDS", 15.0)
 
+def _default_response_audio_path() -> str:
+    if SPEECH_BACKEND != "local":
+        return str(AUDIO_DIR / "response.mp3")
+    if LOCAL_TTS_ENGINE == "edge":
+        return str(AUDIO_DIR / "response.mp3")
+    return str(AUDIO_DIR / "response.wav")
+
+
 INPUT_AUDIO_PATH = _get_str("INPUT_AUDIO_PATH", str(AUDIO_DIR / "input.wav"))
-RESPONSE_AUDIO_PATH = _get_str(
-    "RESPONSE_AUDIO_PATH",
-    str(AUDIO_DIR / ("response.wav" if SPEECH_BACKEND == "local" else "response.mp3")),
-)
+RESPONSE_AUDIO_PATH = _get_str("RESPONSE_AUDIO_PATH", _default_response_audio_path())
 
 MIC_DEVICE = _get_str("MIC_DEVICE")
 SPEAKER_DEVICE = _get_str("SPEAKER_DEVICE")
@@ -128,8 +135,8 @@ def validate_required_environment() -> None:
             f"현재 값: {SPEECH_BACKEND!r}"
         )
 
-    if not Path(LOCAL_PIPER_MODEL).exists():
+    if LOCAL_TTS_ENGINE == "piper" and not Path(LOCAL_PIPER_MODEL).exists():
         raise RuntimeError(
-            "로컬 TTS 모델이 없습니다. "
+            "로컬 Piper TTS 모델이 없습니다. "
             f"LOCAL_PIPER_MODEL 경로를 확인해 주세요: {LOCAL_PIPER_MODEL}"
         )
