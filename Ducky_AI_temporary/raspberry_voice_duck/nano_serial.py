@@ -37,13 +37,23 @@ class NanoSerialAdapter:
                 self._port,
                 baudrate=self._baud_rate,
                 timeout=self._timeout_seconds,
+                dsrdtr=False,
+                rtscts=False,
             )
+            # DTR 토글로 Nano가 리셋되는 것을 줄인다.
+            self._serial.dtr = False
+            self._serial.reset_input_buffer()
+            time.sleep(0.3)
             logger.info("Connected to Arduino Nano on %s", self._port)
             return True
         except SerialException:
-            logger.warning("Failed to connect to Nano serial on %s", self._port, exc_info=True)
+            logger.warning("Failed to connect to Nano serial on %s", self._port)
             self._serial = None
             return False
+
+    def _handle_serial_error(self, action: str) -> None:
+        logger.info("Nano serial %s failed; will reconnect", action)
+        self.close()
 
     def send_led_state(self, state_name: str) -> bool:
         if not self._connect_if_needed():
@@ -55,8 +65,7 @@ class NanoSerialAdapter:
             self._serial.flush()
             return True
         except SerialException:
-            logger.warning("Failed to send LED state to Nano", exc_info=True)
-            self.close()
+            self._handle_serial_error("LED write")
             return False
 
     def read_button_event(self) -> bool:
@@ -65,11 +74,16 @@ class NanoSerialAdapter:
 
         assert self._serial is not None
         try:
+            if self._serial.in_waiting <= 0:
+                return False
+
             raw_line = self._serial.readline().decode("utf-8", errors="ignore").strip()
         except SerialException:
-            logger.warning("Failed while reading Nano serial", exc_info=True)
-            self.close()
+            self._handle_serial_error("read")
             return False
+
+        if raw_line and raw_line != "BTN:PRESS":
+            logger.debug("Ignored Nano serial line: %r", raw_line)
 
         return raw_line == "BTN:PRESS"
 
@@ -79,6 +93,6 @@ class NanoSerialAdapter:
         try:
             self._serial.close()
         except SerialException:
-            logger.warning("Failed to close Nano serial cleanly", exc_info=True)
+            logger.warning("Failed to close Nano serial cleanly")
         finally:
             self._serial = None
