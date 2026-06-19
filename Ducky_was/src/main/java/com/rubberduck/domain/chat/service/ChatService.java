@@ -6,16 +6,23 @@ import java.util.Map;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.rubberduck.domain.chat.dto.ChatTurnResponse;
 import com.rubberduck.domain.chat.dto.ConversationDetailResponse;
 import com.rubberduck.domain.chat.dto.ConversationSummaryResponse;
+import com.rubberduck.domain.chat.dto.DuckConversationSyncResponse;
+import com.rubberduck.domain.chat.dto.DuckDeviceProfileResponse;
 import com.rubberduck.domain.chat.dto.EndConversationResponse;
 import com.rubberduck.domain.chat.dto.HintResponse;
 import com.rubberduck.domain.chat.dto.MessageResponse;
 import com.rubberduck.domain.chat.entity.ChatMessage;
 import com.rubberduck.domain.chat.entity.Conversation;
+import com.rubberduck.domain.chat.entity.DuckSyncTurn;
 import com.rubberduck.domain.chat.repository.ChatMessageRepository;
 import com.rubberduck.domain.chat.repository.ConversationRepository;
+import com.rubberduck.domain.chat.repository.DuckSyncTurnRepository;
 import com.rubberduck.domain.chat.service.ChatResponseService.AiReply;
 import com.rubberduck.domain.device.entity.Device;
 import com.rubberduck.domain.device.service.DeviceService;
@@ -31,8 +38,11 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class ChatService {
 
+    private static final Logger log = LoggerFactory.getLogger(ChatService.class);
+
     private final ConversationRepository conversationRepository;
     private final ChatMessageRepository chatMessageRepository;
+    private final DuckSyncTurnRepository duckSyncTurnRepository;
     private final DeviceService deviceService;
     private final UserService userService;
     private final ChatResponseService chatResponseService;
@@ -101,7 +111,111 @@ public class ChatService {
             conversation.setDevice(device);
         }
 
-        return appendUserTurn(user, conversation, messageText, inputType == null ? "voice" : inputType, learningType);
+        Map<String, String> effectiveLearningType = deviceService.findLinkedUser(device).isPresent()
+                ? null
+                : learningType;
+
+        return appendUserTurn(
+                user,
+                conversation,
+                messageText,
+                inputType == null ? "voice" : inputType,
+                effectiveLearningType
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public DuckDeviceProfileResponse getDeviceProfile(String deviceSerial) {
+        Device device = deviceService.findOrCreateBySerial(deviceSerial);
+        return deviceService.findLinkedUser(device)
+                .map(user -> new DuckDeviceProfileResponse(
+                        user.getProcessingStyle(),
+                        user.getExpressionStyle(),
+                        user.getUnderstandingStyle()
+                ))
+                .orElse(new DuckDeviceProfileResponse("active", "visual", "sequential"));
+    }
+
+    @Transactional
+    public DuckConversationSyncResponse recordDeviceTurnSync(
+            String externalUserId,
+            String deviceSerial,
+            Long conversationId,
+            String clientTurnId,
+            String userMessageText,
+            String assistantMessageText,
+            String inputType,
+            Boolean sttSuccess,
+            Boolean ttsSuccess
+    ) {
+        String normalizedClientTurnId = requireText(clientTurnId);
+        Device device = deviceService.findOrCreateBySerial(deviceSerial);
+        Conversation conversation;
+        User user;
+
+        if (conversationId != null) {
+            conversation = getConversationEntity(conversationId);
+            user = conversation.getUser();
+        } else {
+            user = deviceService.findLinkedUser(device)
+                    .orElseGet(() -> userService.findOrCreateExternalUser(externalUserId));
+            conversation = conversationRepository.findFirstByUserAndStatusOrderByUpdatedAtDesc(user, "in_progress")
+                    .orElseGet(() -> conversationRepository.save(
+                            Conversation.start(user, device, null, "Raspberry voice session", "음성 러버덕 질문 연결")
+                    ));
+        }
+
+        if (conversation.getDevice() == null) {
+            conversation.setDevice(device);
+        }
+
+        var existingTurn = duckSyncTurnRepository.findByDeviceSerialAndClientTurnId(
+                device.getSerialNumber(),
+                normalizedClientTurnId
+        );
+        if (existingTurn.isPresent()) {
+            return new DuckConversationSyncResponse(existingTurn.get().getConversationId(), true);
+        }
+
+        String normalizedUserText = requireText(userMessageText);
+        String normalizedAssistantText = requireText(assistantMessageText);
+        String normalizedInputType = normalizeInputType(inputType == null ? "voice" : inputType);
+        int userSequence = conversation.getMessageCount() + 1;
+
+        ChatMessage userMessage = ChatMessage.create(
+                conversation,
+                "user",
+                normalizedUserText,
+                "question",
+                normalizedInputType,
+                userSequence
+        );
+        userMessage.setSttText(normalizedUserText);
+        userMessage.setSttSuccess(sttSuccess);
+        conversation.increaseMessageCount();
+
+        ChatMessage assistantMessage = ChatMessage.create(
+                conversation,
+                "assistant",
+                normalizedAssistantText,
+                "answer",
+                "system",
+                userSequence + 1
+        );
+        assistantMessage.setTtsText(normalizedAssistantText);
+        assistantMessage.setTtsSuccess(ttsSuccess);
+        conversation.increaseMessageCount();
+
+        chatMessageRepository.save(userMessage);
+        chatMessageRepository.save(assistantMessage);
+        conversationRepository.save(conversation);
+        duckSyncTurnRepository.save(DuckSyncTurn.create(
+                device.getSerialNumber(),
+                normalizedClientTurnId,
+                conversation.getId()
+        ));
+
+        return new DuckConversationSyncResponse(conversation.getId(), true);
     }
 
     @Transactional
@@ -161,6 +275,13 @@ public class ChatService {
         String documentContext = completion
                 ? ""
                 : documentService.toPromptContext(documentService.searchResults(user, normalizedText, 3));
+        if (!completion && documentContext.isBlank()) {
+            log.debug(
+                    "RAG context empty for userId={} query='{}'",
+                    user.getId(),
+                    normalizedText
+            );
+        }
         AiReply aiReply = completion
                 ? new AiReply(chatResponseService.generateCompletionFeedback(user, conversation, conversationHistory), "feedback")
                 : chatResponseService.generateTurn(normalizedText, user, documentContext, conversationHistory, learningType);

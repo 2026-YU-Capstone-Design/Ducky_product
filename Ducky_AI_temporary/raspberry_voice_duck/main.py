@@ -4,6 +4,7 @@ from typing import Any
 
 from audio_io import play_audio, record_audio
 from config import (
+    CHAT_BACKEND,
     COMMAND_POLL_SECONDS,
     INPUT_AUDIO_PATH,
     NANO_RECONNECT_SECONDS,
@@ -17,22 +18,29 @@ from config import (
     RUN_CONTINUOUSLY,
     SERVER_FAILURE_MESSAGE,
     STT_FAILURE_MESSAGE,
-    TTS_FAILURE_MESSAGE,
     TRIGGER_MODE,
+    TTS_FAILURE_MESSAGE,
     ensure_runtime_dirs,
     validate_required_environment,
 )
+from conversation_queue import enqueue_turn
 from led_state import LedState
+from local_llm import generate_response as generate_local_response
+from local_llm import save_cached_learning_style
 from nano_serial import NanoSerialAdapter
 from server_client import (
     complete_command,
+    fetch_device_profile,
     fetch_next_command,
+    flush_pending_queue,
     report_iot_error,
     report_iot_state,
     report_tts_complete,
     save_conversation_log,
     send_message_to_server,
     set_connection_state_callback,
+    set_reconnect_callback,
+    should_use_server_chat,
 )
 from stt import transcribe_audio
 from tts import synthesize_speech
@@ -41,6 +49,7 @@ from tts import synthesize_speech
 logger = logging.getLogger(__name__)
 nano_adapter: NanoSerialAdapter | None = None
 _is_offline_led_active = False
+_active_conversation_id: int | None = None
 
 
 def _nano_led_label_for_state(state: LedState) -> str:
@@ -66,14 +75,25 @@ def _handle_connection_state(online: bool, failed_seconds: float) -> None:
     if nano_adapter is None:
         return
     if online:
-        # 정상 통신 복구 시점에는 현재 음성 처리 상태를 덮어쓰지 않는다.
-        # 다음 _report_state 호출에서 자연스럽게 LED가 갱신된다.
         _is_offline_led_active = False
         return
 
     if failed_seconds >= OFFLINE_TIMEOUT_SECONDS and not _is_offline_led_active:
         nano_adapter.send_led_state("OFFLINE")
         _is_offline_led_active = True
+
+
+def _on_server_reconnected() -> None:
+    profile = fetch_device_profile()
+    if profile:
+        save_cached_learning_style(profile)
+    flush_pending_queue()
+
+
+def _refresh_learning_style_cache() -> None:
+    profile = fetch_device_profile()
+    if profile:
+        save_cached_learning_style(profile)
 
 
 def _report_error(error_code: str, error: object) -> None:
@@ -88,6 +108,15 @@ def _message_id_from_response(server_response: dict[str, Any]) -> int | None:
         return raw_message_id
     if isinstance(raw_message_id, str) and raw_message_id.isdigit():
         return int(raw_message_id)
+    return None
+
+
+def _conversation_id_from_response(server_response: dict[str, Any]) -> int | None:
+    raw_conversation_id = server_response.get("conversationId")
+    if isinstance(raw_conversation_id, int):
+        return raw_conversation_id
+    if isinstance(raw_conversation_id, str) and raw_conversation_id.isdigit():
+        return int(raw_conversation_id)
     return None
 
 
@@ -125,6 +154,15 @@ def _get_server_response(user_text: str, conversation_id: int | None = None) -> 
     return server_response["message"].strip(), server_response
 
 
+def _get_local_response(user_text: str) -> str:
+    try:
+        return generate_local_response(user_text)
+    except Exception as exc:
+        logger.warning("Local LLM failed: %s", exc)
+        _report_error("LOCAL_LLM_FAILED", exc)
+        raise
+
+
 def _speak(text: str) -> bool:
     try:
         synthesize_speech(text, RESPONSE_AUDIO_PATH)
@@ -139,7 +177,34 @@ def _speak(text: str) -> bool:
     return True
 
 
+def _resolve_chat_response(
+    user_text: str,
+    conversation_id: int | None = None,
+) -> tuple[str, dict[str, Any], bool]:
+    """
+    Return (response_text, server_response, used_local_llm).
+    """
+    if should_use_server_chat():
+        try:
+            response_text, server_response = _get_server_response(
+                user_text,
+                conversation_id=conversation_id,
+            )
+            return response_text, server_response, False
+        except Exception:
+            if CHAT_BACKEND == "server":
+                raise
+
+    response_text = _get_local_response(user_text)
+    return response_text, {}, True
+
+
 def run_once(conversation_id: int | None = None) -> bool:
+    global _active_conversation_id
+
+    if conversation_id is None:
+        conversation_id = _active_conversation_id
+
     _report_state(LedState.RECORDING)
     print("듣고 있어요. 문제를 설명해 주세요.")
     _speak("듣고 있어요. 문제를 설명해 주세요.")
@@ -152,6 +217,7 @@ def run_once(conversation_id: int | None = None) -> bool:
     print(f"사용자: {user_text}")
 
     server_response: dict[str, Any] = {}
+    used_local_llm = False
 
     if user_text == STT_FAILURE_MESSAGE:
         stt_success = False
@@ -164,7 +230,10 @@ def run_once(conversation_id: int | None = None) -> bool:
     else:
         _report_state(LedState.THINKING)
         try:
-            response_text, server_response = _get_server_response(user_text, conversation_id=conversation_id)
+            response_text, server_response, used_local_llm = _resolve_chat_response(
+                user_text,
+                conversation_id=conversation_id,
+            )
         except Exception:
             _report_state(LedState.ERROR)
             response_text = SERVER_FAILURE_MESSAGE
@@ -176,11 +245,26 @@ def run_once(conversation_id: int | None = None) -> bool:
     if server_response and tts_success:
         report_tts_complete(_message_id_from_response(server_response))
 
+    if used_local_llm and user_text.strip() and response_text not in {
+        STT_FAILURE_MESSAGE,
+        NO_SPEECH_MESSAGE,
+        SERVER_FAILURE_MESSAGE,
+    }:
+        enqueue_turn(
+            user_text,
+            response_text,
+            stt_success=stt_success,
+            tts_success=tts_success,
+            conversation_id=conversation_id,
+        )
+        _report_state(LedState.LOGGING)
+        logger.info("Offline turn queued for later sync")
+
     if server_response and server_response.get("shouldSaveLog", True):
-        conversation_id = server_response.get("conversationId")
-        if conversation_id is not None and not isinstance(conversation_id, int):
-            logger.warning("Invalid conversationId from server: %r", conversation_id)
-            conversation_id = None
+        synced_conversation_id = _conversation_id_from_response(server_response)
+        if synced_conversation_id is not None:
+            _active_conversation_id = synced_conversation_id
+            conversation_id = synced_conversation_id
 
         _report_state(LedState.LOGGING)
         saved = save_conversation_log(
@@ -231,7 +315,7 @@ def run_command_loop() -> None:
                 complete_command(command_id, True)
         except KeyboardInterrupt:
             _report_state(LedState.STOPPED)
-            print("?꾨줈洹몃옩??醫낅즺?⑸땲??")
+            print("프로그램을 종료합니다.")
             break
 
 
@@ -267,6 +351,7 @@ def main() -> None:
     configure_logging()
     ensure_runtime_dirs()
     set_connection_state_callback(_handle_connection_state)
+    set_reconnect_callback(_on_server_reconnected)
     _report_state(LedState.BOOTING)
 
     try:
@@ -276,6 +361,9 @@ def main() -> None:
         _report_error("CONFIGURATION_ERROR", exc)
         print(exc)
         return
+
+    _refresh_learning_style_cache()
+    flush_pending_queue()
 
     if TRIGGER_MODE == "button":
         nano_adapter = NanoSerialAdapter(

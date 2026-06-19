@@ -37,6 +37,7 @@ function AppLaunchSplash() {
 export function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [isReady, setIsReady] = useState(false);
+  const [deviceLinkWarning, setDeviceLinkWarning] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -70,6 +71,15 @@ export function AppShell({ children }: { children: ReactNode }) {
         persistUser(user);
         void ensureDefaultRaspberryLinked(user.id).catch((deviceLinkError) => {
           console.warn("Default Raspberry link failed", deviceLinkError);
+          if (!cancelled) {
+            const message =
+              deviceLinkError instanceof Error
+                ? deviceLinkError.message
+                : "라즈베리 디바이스 연결에 실패했습니다.";
+            setDeviceLinkWarning(
+              `IoT/RAG 연동을 위해 라즈베리 디바이스 연결이 필요합니다. (${message})`,
+            );
+          }
         });
 
         if (!user.onboarded) {
@@ -107,6 +117,11 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="relative flex h-dvh overflow-hidden bg-[#FAF8F5] text-[#2E2A22] transition-colors dark:bg-[#171512] dark:text-white">
       <Sidebar />
       <main className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overscroll-contain pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-0">
+        {deviceLinkWarning ? (
+          <div className="border-b border-[#FECA43]/60 bg-[#FFF7E0] px-4 py-3 text-sm text-[#6B5200] dark:border-[#FECA43]/40 dark:bg-[#2A251D] dark:text-[#FECA43]">
+            {deviceLinkWarning}
+          </div>
+        ) : null}
         {children}
       </main>
       <BottomNav />

@@ -1,5 +1,6 @@
 package com.rubberduck.domain.iot;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -31,6 +32,57 @@ class IotCompatibilityFlowTest {
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.webAppContextSetup(context).build();
+    }
+
+    @Test
+    void duckConversationSyncStoresTurnWithoutAi() throws Exception {
+        String suffix = String.valueOf(System.nanoTime());
+        String deviceId = "raspberry-duck-sync-" + suffix;
+        String userId = "iot-sync-user-" + suffix;
+        String clientTurnId = "turn-" + suffix;
+
+        mockMvc.perform(post("/api/duck/conversation/sync")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "deviceId", deviceId,
+                                "userId", userId,
+                                "clientTurnId", clientTurnId,
+                                "userMessage", "오프라인에서 물어본 질문",
+                                "assistantMessage", "오프라인에서 받은 답변",
+                                "inputType", "voice",
+                                "sttSuccess", true,
+                                "ttsSuccess", true
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.synced").value(true))
+                .andExpect(jsonPath("$.data.conversationId").isNumber());
+
+        mockMvc.perform(post("/api/duck/conversation/sync")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "deviceId", deviceId,
+                                "userId", userId,
+                                "clientTurnId", clientTurnId,
+                                "userMessage", "오프라인에서 물어본 질문",
+                                "assistantMessage", "오프라인에서 받은 답변",
+                                "inputType", "voice",
+                                "sttSuccess", true,
+                                "ttsSuccess", true
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.synced").value(true));
+    }
+
+    @Test
+    void duckDeviceProfileReturnsDefaultsWhenUnlinked() throws Exception {
+        String deviceId = "raspberry-duck-profile-" + System.nanoTime();
+
+        mockMvc.perform(get("/api/duck/device-profile")
+                        .param("deviceId", deviceId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.processing").value("active"))
+                .andExpect(jsonPath("$.data.expression").value("visual"))
+                .andExpect(jsonPath("$.data.understanding").value("sequential"));
     }
 
     @Test

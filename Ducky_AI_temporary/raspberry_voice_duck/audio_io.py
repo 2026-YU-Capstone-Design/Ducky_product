@@ -3,7 +3,13 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from config import MIC_DEVICE, SPEAKER_DEVICE
+from config import (
+    MIC_DEVICE,
+    RECORD_CHANNELS,
+    RECORD_FORMAT,
+    RECORD_RATE,
+    SPEAKER_DEVICE,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -49,7 +55,21 @@ def record_audio(output_path: str, duration: int = 7) -> None:
     command = ["arecord"]
     if MIC_DEVICE:
         command.extend(["-D", MIC_DEVICE])
-    command.extend(["-f", "cd", "-t", "wav", "-d", str(duration), str(output)])
+    command.extend(
+        [
+            "-f",
+            RECORD_FORMAT,
+            "-r",
+            str(RECORD_RATE),
+            "-c",
+            str(RECORD_CHANNELS),
+            "-t",
+            "wav",
+            "-d",
+            str(duration),
+            str(output),
+        ],
+    )
 
     _run_audio_command(command, "녹음")
 

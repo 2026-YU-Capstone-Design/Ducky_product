@@ -147,11 +147,38 @@ class ServerClientTelemetryTest(unittest.TestCase):
                 "userId": "test-user",
                 "inputType": "voice",
                 "message": "hello",
-                "learningType": {
-                    "processing": "reflective",
-                    "expression": "verbal",
-                    "structure": "sequential",
-                },
+                "conversationId": 12,
+            },
+            timeout=30.0,
+        )
+
+    def test_sync_conversation_turn_posts_payload(self) -> None:
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = {"conversationId": 15, "synced": True}
+
+        with patch.object(server_client.requests, "post", return_value=response) as post:
+            result = server_client.sync_conversation_turn(
+                "turn-1",
+                "hello",
+                "world",
+                stt_success=True,
+                tts_success=True,
+                conversation_id=12,
+            )
+
+        self.assertEqual({"conversationId": 15, "synced": True}, result)
+        post.assert_called_once_with(
+            "http://localhost:8080/api/duck/conversation/sync",
+            json={
+                "deviceId": "raspberry-duck-001",
+                "userId": "test-user",
+                "clientTurnId": "turn-1",
+                "userMessage": "hello",
+                "assistantMessage": "world",
+                "inputType": "voice",
+                "sttSuccess": True,
+                "ttsSuccess": True,
                 "conversationId": 12,
             },
             timeout=30.0,

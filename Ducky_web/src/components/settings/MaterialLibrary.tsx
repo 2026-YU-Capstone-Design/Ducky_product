@@ -31,6 +31,7 @@ import {
   listDocuments,
   uploadDocument,
 } from "@/lib/api/documents";
+import { ApiError } from "@/lib/api/client";
 import { cn } from "@/lib/utils";
 import type {
   LearningMaterial,
@@ -201,19 +202,37 @@ export function MaterialLibrary() {
 
     try {
       const uploadedMaterials: LearningMaterial[] = [];
+      const failures: string[] = [];
+
       for (const file of nextFiles) {
-        uploadedMaterials.push(await uploadDocument(file));
+        try {
+          uploadedMaterials.push(await uploadDocument(file));
+        } catch (error) {
+          const message =
+            error instanceof ApiError
+              ? error.message
+              : error instanceof Error
+                ? error.message
+                : "자료 업로드에 실패했습니다.";
+          failures.push(`${file.name}: ${message}`);
+        }
       }
 
-      setMaterials((currentMaterials) => [
-        ...uploadedMaterials,
-        ...currentMaterials.filter(
-          (material) =>
-            !uploadedMaterials.some(
-              (uploadedMaterial) => uploadedMaterial.id === material.id,
-            ),
-        ),
-      ]);
+      if (uploadedMaterials.length > 0) {
+        setMaterials((currentMaterials) => [
+          ...uploadedMaterials,
+          ...currentMaterials.filter(
+            (material) =>
+              !uploadedMaterials.some(
+                (uploadedMaterial) => uploadedMaterial.id === material.id,
+              ),
+          ),
+        ]);
+      }
+
+      if (failures.length > 0) {
+        setErrorMessage(failures.join("\n"));
+      }
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "자료 업로드에 실패했습니다.",
@@ -272,6 +291,8 @@ export function MaterialLibrary() {
             </div>
             <p className="mt-3 max-w-2xl text-sm leading-relaxed text-gray-500 break-keep dark:text-gray-400">
               업로드한 자료는 색인 후 채팅 답변의 참고 문맥으로 사용됩니다.
+              지원 형식: PDF, DOCX, PPTX, TXT, MD, CSV, JSON.
+              스캔 PDF나 이미지는 텍스트 추출이 되지 않을 수 있습니다.
             </p>
           </div>
 

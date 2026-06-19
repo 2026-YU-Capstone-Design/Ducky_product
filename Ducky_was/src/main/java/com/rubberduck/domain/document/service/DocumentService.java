@@ -92,7 +92,6 @@ public class DocumentService {
 
         return chunkRepository.findByDocument_UserAndDocument_RagEnabledTrue(user).stream()
                 .map(chunk -> toSearchResult(chunk, queryEmbedding))
-                .filter(result -> result.score() > 0.0d)
                 .sorted(Comparator.comparingDouble(DocumentSearchResult::score).reversed())
                 .limit(resultLimit)
                 .toList();

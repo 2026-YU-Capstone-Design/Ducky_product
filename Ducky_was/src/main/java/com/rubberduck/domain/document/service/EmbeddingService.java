@@ -19,12 +19,30 @@ public class EmbeddingService {
             if (token.isBlank()) {
                 continue;
             }
-            int index = Math.floorMod(token.hashCode(), DIMENSIONS);
-            vector[index] += 1.0d + Math.min(token.length(), 12) * 0.03d;
+            addToken(vector, token);
         }
 
+        addCharacterBigrams(vector, normalized);
         normalize(vector);
         return vector;
+    }
+
+    private void addToken(double[] vector, String token) {
+        int index = Math.floorMod(token.hashCode(), DIMENSIONS);
+        vector[index] += 1.0d + Math.min(token.length(), 12) * 0.03d;
+    }
+
+    private void addCharacterBigrams(double[] vector, String normalized) {
+        String compact = normalized.replaceAll("[^\\p{L}\\p{N}]+", "");
+        if (compact.length() < 2) {
+            return;
+        }
+
+        for (int i = 0; i < compact.length() - 1; i++) {
+            String bigram = compact.substring(i, i + 2);
+            int index = Math.floorMod(bigram.hashCode(), DIMENSIONS);
+            vector[index] += 0.6d;
+        }
     }
 
     public String toJson(double[] vector) {

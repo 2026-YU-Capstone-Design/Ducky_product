@@ -5,12 +5,12 @@ from typing import Any, Callable
 import requests
 
 from config import (
+    CHAT_BACKEND,
     COMMAND_POLL_SECONDS,
     DEVICE_ID,
     IOT_EVENT_TIMEOUT_SECONDS,
     IOT_FAILURE_BACKOFF_SECONDS,
     IOT_REPORTING_ENABLED,
-    LEARNING_TYPE,
     REQUEST_TIMEOUT_SECONDS,
     SERVER_BASE_URL,
     USER_ID,
@@ -21,6 +21,7 @@ from led_state import LedState
 logger = logging.getLogger(__name__)
 _iot_backoff_until = 0.0
 _connection_state_callback: Callable[[bool, float], None] | None = None
+_reconnect_callback: Callable[[], None] | None = None
 _last_server_ok_at = time.monotonic()
 _server_online = True
 
@@ -38,6 +39,11 @@ def set_connection_state_callback(callback: Callable[[bool, float], None] | None
     _connection_state_callback = callback
 
 
+def set_reconnect_callback(callback: Callable[[], None] | None) -> None:
+    global _reconnect_callback
+    _reconnect_callback = callback
+
+
 def _notify_connection_state(online: bool, failed_seconds: float) -> None:
     if _connection_state_callback is None:
         return
@@ -49,10 +55,16 @@ def _notify_connection_state(online: bool, failed_seconds: float) -> None:
 
 def _mark_server_ok() -> None:
     global _last_server_ok_at, _server_online
+    was_offline = not _server_online
     _last_server_ok_at = time.monotonic()
     if not _server_online:
         _server_online = True
     _notify_connection_state(True, 0.0)
+    if was_offline and _reconnect_callback is not None:
+        try:
+            _reconnect_callback()
+        except Exception:
+            logger.warning("Reconnect callback failed", exc_info=True)
 
 
 def _mark_server_fail() -> None:
@@ -61,6 +73,10 @@ def _mark_server_fail() -> None:
     if _server_online:
         _server_online = False
     _notify_connection_state(False, failed_seconds)
+
+
+def is_server_online() -> bool:
+    return _server_online
 
 
 def _state_value(state: LedState | str) -> str:
@@ -115,6 +131,43 @@ def check_server_health() -> bool:
     else:
         _mark_server_fail()
     return is_healthy
+
+
+def should_use_server_chat() -> bool:
+    if CHAT_BACKEND == "server":
+        return True
+    if CHAT_BACKEND == "local":
+        return False
+    return check_server_health()
+
+
+def fetch_device_profile() -> dict[str, str] | None:
+    try:
+        response = requests.get(
+            _url("/api/duck/device-profile"),
+            params={"deviceId": DEVICE_ID},
+            timeout=REQUEST_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        data = response.json()
+    except (requests.RequestException, ValueError):
+        logger.info("Device profile fetch failed", exc_info=True)
+        _mark_server_fail()
+        return None
+
+    if not isinstance(data, dict):
+        return None
+
+    profile = {
+        "processing": str(data.get("processing", "")),
+        "expression": str(data.get("expression", "")),
+        "understanding": str(data.get("understanding", "")),
+    }
+    if not any(profile.values()):
+        return None
+
+    _mark_server_ok()
+    return profile
 
 
 def report_iot_state(state: LedState | str) -> bool:
@@ -215,12 +268,11 @@ def send_message_to_server(user_text: str, conversation_id: int | None = None) -
     """
     Send transcribed user text to the Spring Boot server and return JSON.
     """
-    payload = {
+    payload: dict[str, Any] = {
         "deviceId": DEVICE_ID,
         "userId": USER_ID,
         "inputType": "voice",
         "message": user_text,
-        "learningType": LEARNING_TYPE,
     }
     if conversation_id is not None:
         payload["conversationId"] = conversation_id
@@ -249,6 +301,96 @@ def send_message_to_server(user_text: str, conversation_id: int | None = None) -
 
     _mark_server_ok()
     return data
+
+
+def sync_conversation_turn(
+    turn_id: str,
+    user_text: str,
+    assistant_text: str,
+    *,
+    stt_success: bool,
+    tts_success: bool,
+    conversation_id: int | None = None,
+) -> dict[str, Any] | None:
+    payload: dict[str, Any] = {
+        "deviceId": DEVICE_ID,
+        "userId": USER_ID,
+        "clientTurnId": turn_id,
+        "userMessage": user_text,
+        "assistantMessage": assistant_text,
+        "inputType": "voice",
+        "sttSuccess": stt_success,
+        "ttsSuccess": tts_success,
+    }
+    if conversation_id is not None:
+        payload["conversationId"] = conversation_id
+
+    try:
+        response = requests.post(
+            _url("/api/duck/conversation/sync"),
+            json=payload,
+            timeout=REQUEST_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        data = response.json()
+    except requests.RequestException:
+        logger.warning("Conversation sync failed for turn %s", turn_id, exc_info=True)
+        _mark_server_fail()
+        return None
+    except ValueError:
+        logger.warning("Conversation sync returned invalid JSON for turn %s", turn_id)
+        _mark_server_fail()
+        return None
+
+    if not isinstance(data, dict):
+        return None
+
+    _mark_server_ok()
+    return data
+
+
+def flush_pending_queue() -> int:
+    from conversation_queue import list_pending_turns, remove_turn
+
+    synced_count = 0
+    active_conversation_id: int | None = None
+
+    for entry in list_pending_turns():
+        turn_id = entry.get("turnId")
+        user_text = entry.get("userText")
+        assistant_text = entry.get("assistantText")
+        if not isinstance(turn_id, str) or not user_text or not assistant_text:
+            continue
+
+        conversation_id = entry.get("conversationId", active_conversation_id)
+        if isinstance(conversation_id, str) and conversation_id.isdigit():
+            conversation_id = int(conversation_id)
+        if not isinstance(conversation_id, int):
+            conversation_id = active_conversation_id
+
+        result = sync_conversation_turn(
+            turn_id,
+            str(user_text),
+            str(assistant_text),
+            stt_success=bool(entry.get("sttSuccess", True)),
+            tts_success=bool(entry.get("ttsSuccess", True)),
+            conversation_id=conversation_id,
+        )
+        if result is None:
+            break
+
+        raw_conversation_id = result.get("conversationId")
+        if isinstance(raw_conversation_id, int):
+            active_conversation_id = raw_conversation_id
+        elif isinstance(raw_conversation_id, str) and raw_conversation_id.isdigit():
+            active_conversation_id = int(raw_conversation_id)
+
+        remove_turn(turn_id)
+        synced_count += 1
+
+    if synced_count:
+        logger.info("Synced %s pending offline turn(s) to server", synced_count)
+    return synced_count
 
 
 def save_conversation_log(
