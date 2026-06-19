@@ -48,6 +48,16 @@ def _get_str(name: str, default: str = "") -> str:
 
 
 SPEECH_BACKEND = _get_str("SPEECH_BACKEND", "openai").lower()
+CHAT_BACKEND = _get_str("CHAT_BACKEND", "server").lower()
+
+OLLAMA_BASE_URL = _get_str("OLLAMA_BASE_URL", "http://localhost:11434")
+OLLAMA_MODEL = _get_str("OLLAMA_MODEL", "qwen2.5:0.5b")
+LOCAL_LLM_SYSTEM_PROMPT = _get_str(
+    "LOCAL_LLM_SYSTEM_PROMPT",
+    "당신은 학습을 돕는 Ducky입니다. 학생의 질문에 한국어로 친절하고 짧게 답하세요. "
+    "정답을 바로 주기보다 이해를 돕는 질문과 힌트를 우선하세요.",
+)
+LOCAL_LOG_PATH = _get_str("LOCAL_LOG_PATH", str(BASE_DIR / "logs" / "conversations.jsonl"))
 
 OPENAI_API_KEY = _get_str("OPENAI_API_KEY")
 OPENAI_STT_MODEL = _get_str("OPENAI_STT_MODEL", "gpt-4o-transcribe")
@@ -57,6 +67,7 @@ OPENAI_TTS_VOICE = _get_str("OPENAI_TTS_VOICE", "marin")
 LOCAL_WHISPER_MODEL = _get_str("LOCAL_WHISPER_MODEL", "base")
 LOCAL_WHISPER_DEVICE = _get_str("LOCAL_WHISPER_DEVICE", "cpu")
 LOCAL_WHISPER_COMPUTE_TYPE = _get_str("LOCAL_WHISPER_COMPUTE_TYPE", "int8")
+LOCAL_WHISPER_VAD_FILTER = _get_bool("LOCAL_WHISPER_VAD_FILTER", False)
 LOCAL_PIPER_BIN = _get_str("LOCAL_PIPER_BIN", "piper")
 LOCAL_PIPER_MODEL = _get_str(
     "LOCAL_PIPER_MODEL",
@@ -124,6 +135,12 @@ def ensure_runtime_dirs() -> None:
 
 
 def validate_required_environment() -> None:
+    if CHAT_BACKEND not in {"server", "local"}:
+        raise RuntimeError(
+            "CHAT_BACKEND는 server 또는 local 이어야 합니다. "
+            f"현재 값: {CHAT_BACKEND!r}"
+        )
+
     if SPEECH_BACKEND == "openai":
         if not OPENAI_API_KEY:
             raise RuntimeError(

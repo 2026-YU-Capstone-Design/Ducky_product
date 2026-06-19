@@ -5,6 +5,7 @@ from typing import Any, Callable
 import requests
 
 from config import (
+    CHAT_BACKEND,
     COMMAND_POLL_SECONDS,
     DEVICE_ID,
     IOT_EVENT_TIMEOUT_SECONDS,
@@ -16,6 +17,7 @@ from config import (
     USER_ID,
 )
 from led_state import LedState
+from local_llm import check_ollama_health, send_message_to_local_llm
 
 
 logger = logging.getLogger(__name__)
@@ -98,8 +100,16 @@ def _post_iot_event(path: str, payload: dict[str, Any], action: str) -> bool:
 
 def check_server_health() -> bool:
     """
-    Return True only when the server health endpoint responds with status ok.
+    Return True when the configured chat backend is reachable.
     """
+    if CHAT_BACKEND == "local":
+        is_healthy = check_ollama_health()
+        if is_healthy:
+            _mark_server_ok()
+        else:
+            _mark_server_fail()
+        return is_healthy
+
     try:
         response = requests.get(_url("/api/health"), timeout=REQUEST_TIMEOUT_SECONDS)
         response.raise_for_status()
@@ -213,8 +223,14 @@ def complete_command(command_id: int, success: bool, error_message: str | None =
 
 def send_message_to_server(user_text: str, conversation_id: int | None = None) -> dict[str, Any]:
     """
-    Send transcribed user text to the Spring Boot server and return JSON.
+    Send transcribed user text to the configured chat backend and return JSON.
     """
+    if CHAT_BACKEND == "local":
+        del conversation_id
+        data = send_message_to_local_llm(user_text)
+        _mark_server_ok()
+        return data
+
     payload = {
         "deviceId": DEVICE_ID,
         "userId": USER_ID,

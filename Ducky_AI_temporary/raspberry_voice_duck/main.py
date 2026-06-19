@@ -4,6 +4,7 @@ from typing import Any
 
 from audio_io import play_audio, record_audio
 from config import (
+    CHAT_BACKEND,
     COMMAND_POLL_SECONDS,
     INPUT_AUDIO_PATH,
     NANO_RECONNECT_SECONDS,
@@ -23,6 +24,7 @@ from config import (
     validate_required_environment,
 )
 from led_state import LedState
+from local_llm import save_local_conversation_log
 from nano_serial import NanoSerialAdapter
 from server_client import (
     complete_command,
@@ -177,19 +179,27 @@ def run_once(conversation_id: int | None = None) -> bool:
         report_tts_complete(_message_id_from_response(server_response))
 
     if server_response and server_response.get("shouldSaveLog", True):
-        conversation_id = server_response.get("conversationId")
-        if conversation_id is not None and not isinstance(conversation_id, int):
-            logger.warning("Invalid conversationId from server: %r", conversation_id)
-            conversation_id = None
-
         _report_state(LedState.LOGGING)
-        saved = save_conversation_log(
-            conversation_id=conversation_id,
-            user_message=user_text,
-            assistant_message=response_text,
-            stt_success=stt_success,
-            tts_success=tts_success,
-        )
+        if CHAT_BACKEND == "local":
+            saved = save_local_conversation_log(
+                user_message=user_text,
+                assistant_message=response_text,
+                stt_success=stt_success,
+                tts_success=tts_success,
+            )
+        else:
+            conversation_id = server_response.get("conversationId")
+            if conversation_id is not None and not isinstance(conversation_id, int):
+                logger.warning("Invalid conversationId from server: %r", conversation_id)
+                conversation_id = None
+
+            saved = save_conversation_log(
+                conversation_id=conversation_id,
+                user_message=user_text,
+                assistant_message=response_text,
+                stt_success=stt_success,
+                tts_success=tts_success,
+            )
         if not saved:
             logger.info("Conversation log was not saved.")
             _report_error("CONVERSATION_LOG_SAVE_FAILED", "Conversation log save failed")

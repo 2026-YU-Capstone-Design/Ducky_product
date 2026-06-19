@@ -6,6 +6,7 @@ from config import (
     LOCAL_WHISPER_COMPUTE_TYPE,
     LOCAL_WHISPER_DEVICE,
     LOCAL_WHISPER_MODEL,
+    LOCAL_WHISPER_VAD_FILTER,
     OPENAI_API_KEY,
     OPENAI_STT_MODEL,
     SPEECH_BACKEND,
@@ -58,9 +59,12 @@ def _transcribe_with_whisper(audio_path: Path) -> str:
     segments, _info = model.transcribe(
         str(audio_path),
         language=LANGUAGE,
-        vad_filter=True,
+        vad_filter=LOCAL_WHISPER_VAD_FILTER,
     )
-    return "".join(segment.text for segment in segments).strip()
+    text = "".join(segment.text for segment in segments).strip()
+    if not text:
+        logger.warning("Whisper returned empty text for %s", audio_path)
+    return text
 
 
 def transcribe_audio(audio_path: str) -> str:
