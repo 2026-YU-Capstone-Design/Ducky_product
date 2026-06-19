@@ -47,10 +47,26 @@ def _get_str(name: str, default: str = "") -> str:
     return raw_value.strip()
 
 
+SPEECH_BACKEND = _get_str("SPEECH_BACKEND", "openai").lower()
+
 OPENAI_API_KEY = _get_str("OPENAI_API_KEY")
 OPENAI_STT_MODEL = _get_str("OPENAI_STT_MODEL", "gpt-4o-transcribe")
 OPENAI_TTS_MODEL = _get_str("OPENAI_TTS_MODEL", "gpt-4o-mini-tts")
 OPENAI_TTS_VOICE = _get_str("OPENAI_TTS_VOICE", "marin")
+
+LOCAL_WHISPER_MODEL = _get_str("LOCAL_WHISPER_MODEL", "base")
+LOCAL_WHISPER_DEVICE = _get_str("LOCAL_WHISPER_DEVICE", "cpu")
+LOCAL_WHISPER_COMPUTE_TYPE = _get_str("LOCAL_WHISPER_COMPUTE_TYPE", "int8")
+LOCAL_PIPER_BIN = _get_str("LOCAL_PIPER_BIN", "piper")
+LOCAL_PIPER_MODEL = _get_str(
+    "LOCAL_PIPER_MODEL",
+    str(BASE_DIR / "models" / "ko_KR-kss-medium.onnx"),
+)
+LOCAL_PIPER_CONFIG = _get_str(
+    "LOCAL_PIPER_CONFIG",
+    str(BASE_DIR / "models" / "ko_KR-kss-medium.onnx.json"),
+)
+LOCAL_ESPEAK_VOICE = _get_str("LOCAL_ESPEAK_VOICE", "ko")
 
 LANGUAGE = _get_str("LANGUAGE", "ko")
 SERVER_BASE_URL = _get_str("SERVER_BASE_URL", "http://localhost:8080").rstrip("/")
@@ -71,7 +87,10 @@ NANO_RECONNECT_SECONDS = _get_float("NANO_RECONNECT_SECONDS", 2.0)
 OFFLINE_TIMEOUT_SECONDS = _get_float("OFFLINE_TIMEOUT_SECONDS", 15.0)
 
 INPUT_AUDIO_PATH = _get_str("INPUT_AUDIO_PATH", str(AUDIO_DIR / "input.wav"))
-RESPONSE_AUDIO_PATH = _get_str("RESPONSE_AUDIO_PATH", str(AUDIO_DIR / "response.mp3"))
+RESPONSE_AUDIO_PATH = _get_str(
+    "RESPONSE_AUDIO_PATH",
+    str(AUDIO_DIR / ("response.wav" if SPEECH_BACKEND == "local" else "response.mp3")),
+)
 
 MIC_DEVICE = _get_str("MIC_DEVICE")
 SPEAKER_DEVICE = _get_str("SPEAKER_DEVICE")
@@ -95,8 +114,22 @@ def ensure_runtime_dirs() -> None:
 
 
 def validate_required_environment() -> None:
-    if not OPENAI_API_KEY:
+    if SPEECH_BACKEND == "openai":
+        if not OPENAI_API_KEY:
+            raise RuntimeError(
+                "OPENAI_API_KEY가 설정되어 있지 않습니다. "
+                "raspberry_voice_duck/.env 파일에 API 키를 추가해 주세요."
+            )
+        return
+
+    if SPEECH_BACKEND != "local":
         raise RuntimeError(
-            "OPENAI_API_KEY가 설정되어 있지 않습니다. "
-            "raspberry_voice_duck/.env 파일에 API 키를 추가해 주세요."
+            "SPEECH_BACKEND는 openai 또는 local 이어야 합니다. "
+            f"현재 값: {SPEECH_BACKEND!r}"
+        )
+
+    if not Path(LOCAL_PIPER_MODEL).exists():
+        raise RuntimeError(
+            "로컬 TTS 모델이 없습니다. "
+            f"LOCAL_PIPER_MODEL 경로를 확인해 주세요: {LOCAL_PIPER_MODEL}"
         )
