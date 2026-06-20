@@ -5,6 +5,7 @@ from typing import Any
 from audio_io import play_audio, record_audio
 from config import (
     COMMAND_POLL_SECONDS,
+    CONNECTIVITY_POLL_SECONDS,
     INPUT_AUDIO_PATH,
     NANO_RECONNECT_SECONDS,
     NANO_SERIAL_BAUD_RATE,
@@ -25,8 +26,11 @@ from config import (
 from led_state import LedState
 from nano_serial import NanoSerialAdapter
 from server_client import (
+    check_server_health,
     complete_command,
     fetch_next_command,
+    get_offline_duration,
+    is_server_online,
     report_iot_error,
     report_iot_state,
     report_tts_complete,
@@ -41,6 +45,18 @@ from tts import synthesize_speech
 logger = logging.getLogger(__name__)
 nano_adapter: NanoSerialAdapter | None = None
 _is_offline_led_active = False
+_active_led_states = {
+    LedState.RECORDING,
+    LedState.TRANSCRIBING,
+    LedState.SPEAKING,
+}
+
+
+def _should_show_offline_led() -> bool:
+    return (
+        not is_server_online()
+        and get_offline_duration() >= OFFLINE_TIMEOUT_SECONDS
+    )
 
 
 def _nano_led_label_for_state(state: LedState) -> str:
@@ -50,14 +66,17 @@ def _nano_led_label_for_state(state: LedState) -> str:
         return "RESPONDING"
     if state == LedState.OFFLINE:
         return "OFFLINE"
+    if _should_show_offline_led() and state not in _active_led_states:
+        return "OFFLINE"
     return "IDLE"
 
 
 def _report_state(state: LedState) -> None:
     global _is_offline_led_active
     if nano_adapter is not None:
-        nano_adapter.send_led_state(_nano_led_label_for_state(state))
-    _is_offline_led_active = state == LedState.OFFLINE
+        led_label = _nano_led_label_for_state(state)
+        nano_adapter.send_led_state(led_label)
+        _is_offline_led_active = led_label == "OFFLINE"
     report_iot_state(state)
 
 
@@ -66,14 +85,33 @@ def _handle_connection_state(online: bool, failed_seconds: float) -> None:
     if nano_adapter is None:
         return
     if online:
-        # 정상 통신 복구 시점에는 현재 음성 처리 상태를 덮어쓰지 않는다.
-        # 다음 _report_state 호출에서 자연스럽게 LED가 갱신된다.
+        if _is_offline_led_active:
+            nano_adapter.send_led_state("IDLE")
         _is_offline_led_active = False
         return
 
-    if failed_seconds >= OFFLINE_TIMEOUT_SECONDS and not _is_offline_led_active:
+    if failed_seconds >= OFFLINE_TIMEOUT_SECONDS:
         nano_adapter.send_led_state("OFFLINE")
         _is_offline_led_active = True
+
+
+def _init_nano_adapter() -> None:
+    global nano_adapter
+    nano_adapter = NanoSerialAdapter(
+        port=NANO_SERIAL_PORT,
+        baud_rate=NANO_SERIAL_BAUD_RATE,
+        timeout_seconds=NANO_SERIAL_TIMEOUT_SECONDS,
+        reconnect_seconds=NANO_RECONNECT_SECONDS,
+    )
+
+
+def _poll_connectivity(last_check_at: float) -> float:
+    now = time.monotonic()
+    if now - last_check_at < CONNECTIVITY_POLL_SECONDS:
+        return last_check_at
+
+    check_server_health()
+    return now
 
 
 def _report_error(error_code: str, error: object) -> None:
@@ -200,8 +238,10 @@ def run_once(conversation_id: int | None = None) -> bool:
 
 def run_command_loop() -> None:
     _report_state(LedState.IDLE)
+    last_connectivity_check = 0.0
     while True:
         try:
+            last_connectivity_check = _poll_connectivity(last_connectivity_check)
             command = fetch_next_command()
             if not command:
                 time.sleep(COMMAND_POLL_SECONDS)
@@ -237,8 +277,10 @@ def run_command_loop() -> None:
 
 def run_button_loop() -> None:
     _report_state(LedState.IDLE)
+    last_connectivity_check = 0.0
     while True:
         try:
+            last_connectivity_check = _poll_connectivity(last_connectivity_check)
             if nano_adapter is None:
                 time.sleep(0.2)
                 continue
@@ -277,13 +319,10 @@ def main() -> None:
         print(exc)
         return
 
+    _init_nano_adapter()
+    check_server_health()
+
     if TRIGGER_MODE == "button":
-        nano_adapter = NanoSerialAdapter(
-            port=NANO_SERIAL_PORT,
-            baud_rate=NANO_SERIAL_BAUD_RATE,
-            timeout_seconds=NANO_SERIAL_TIMEOUT_SECONDS,
-            reconnect_seconds=NANO_RECONNECT_SECONDS,
-        )
         run_button_loop()
         return
 
@@ -296,8 +335,10 @@ def main() -> None:
         _report_state(LedState.STOPPED)
         return
 
+    last_connectivity_check = 0.0
     while True:
         try:
+            last_connectivity_check = _poll_connectivity(last_connectivity_check)
             run_once()
         except KeyboardInterrupt:
             _report_state(LedState.STOPPED)

@@ -96,6 +96,16 @@ def _post_iot_event(path: str, payload: dict[str, Any], action: str) -> bool:
     return True
 
 
+def is_server_online() -> bool:
+    return _server_online
+
+
+def get_offline_duration() -> float:
+    if _server_online:
+        return 0.0
+    return max(0.0, time.monotonic() - _last_server_ok_at)
+
+
 def check_server_health() -> bool:
     """
     Return True only when the server health endpoint responds with status ok.
