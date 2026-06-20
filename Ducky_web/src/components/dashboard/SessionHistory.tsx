@@ -101,8 +101,8 @@ function SessionMessage({ message }: { message: ChatMessage }) {
 
 function SessionDetail({ session }: { session: Session }) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-5">
-      <div className="grid shrink-0 gap-3 sm:grid-cols-3">
+    <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden p-5">
+      <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-3">
         <Card className="rounded-lg border border-[#E7DDC8] bg-[#FAF8F5] py-0 dark:border-white/10 dark:bg-[#24211D]">
           <CardContent className="p-3">
             <p className="text-xs text-gray-500 dark:text-gray-400">상태</p>
@@ -324,7 +324,7 @@ export function SessionHistory() {
           if (!open) setSelectedSession(null);
         }}
       >
-        <DialogContent className="flex max-h-[92dvh] min-h-[min(42rem,92dvh)] gap-0 overflow-hidden rounded-lg p-0 dark:border-white/10 dark:bg-[#201D19] sm:max-w-4xl">
+        <DialogContent className="flex max-h-[92dvh] min-h-[min(42rem,92dvh)] w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden rounded-lg p-0 dark:border-white/10 dark:bg-[#201D19] sm:max-w-4xl">
           {selectedSession && (
             <>
               <DialogHeader className="shrink-0 border-b border-[#E7DDC8] p-5 pr-12 dark:border-white/10">
@@ -343,7 +343,7 @@ export function SessionHistory() {
                     {selectedSession.topic}
                   </span>
                 </div>
-                <DialogTitle className="mt-2 text-xl font-bold leading-snug text-gray-950 break-keep dark:text-white">
+                <DialogTitle className="mt-2 text-xl font-bold leading-snug text-gray-950 break-words dark:text-white">
                   {selectedSession.title}
                 </DialogTitle>
                 <DialogDescription className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-500 dark:text-gray-400">

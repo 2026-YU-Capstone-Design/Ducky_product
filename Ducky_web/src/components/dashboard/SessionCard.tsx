@@ -52,7 +52,7 @@ export function SessionCard({
               <p className="truncate text-xs font-semibold text-[#B88700]">
                 {session.topic}
               </p>
-              <h3 className="mt-2 line-clamp-2 text-base font-bold leading-snug text-gray-950 break-keep dark:text-white">
+              <h3 className="mt-2 line-clamp-2 text-base font-bold leading-snug text-gray-950 break-words dark:text-white">
                 {session.title}
               </h3>
             </div>
@@ -72,18 +72,18 @@ export function SessionCard({
             {session.summary}
           </p>
 
-          <div className="mt-5 grid grid-cols-3 gap-2 text-sm">
-            <span className="inline-flex min-w-0 items-center gap-1.5 text-gray-500 dark:text-gray-400">
+          <div className="mt-5 flex flex-wrap gap-x-4 gap-y-2 text-sm">
+            <span className="inline-flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
               <Sparkles className="size-4 shrink-0 text-[#B88700]" />
-              <span className="truncate">힌트 {session.hintCount}회</span>
+              힌트 {session.hintCount}회
             </span>
-            <span className="inline-flex min-w-0 items-center gap-1.5 text-gray-500 dark:text-gray-400">
+            <span className="inline-flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
               <MessageCircle className="size-4 shrink-0 text-[#B88700]" />
-              <span className="truncate">메시지 {session.messageCount}개</span>
+              메시지 {session.messageCount}개
             </span>
-            <span className="inline-flex min-w-0 items-center gap-1.5 text-gray-500 dark:text-gray-400">
+            <span className="inline-flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
               <CalendarDays className="size-4 shrink-0 text-[#B88700]" />
-              <span className="truncate">{formatDate(session.updatedAt)}</span>
+              {formatDate(session.updatedAt)}
             </span>
           </div>
         </button>
