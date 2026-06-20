@@ -243,6 +243,33 @@ def run_once(conversation_id: int | None = None) -> bool:
         _report_state(LedState.IDLE)
 
 
+def _execute_start_recording_command(command: dict[str, Any]) -> bool:
+    command_id = _command_id_from_command(command)
+    command_type = command.get("commandType") or command.get("command_type")
+    if command_type != "START_RECORDING":
+        logger.warning("Unknown command type from server: %r", command_type)
+        if command_id is not None:
+            complete_command(command_id, False, f"Unknown command type: {command_type}")
+        return False
+
+    try:
+        run_once(conversation_id=_conversation_id_from_command(command))
+    except Exception as exc:
+        logger.exception("Command execution failed")
+        _report_state(LedState.ERROR)
+        _report_error("COMMAND_EXECUTION_FAILED", exc)
+        if command_id is not None:
+            complete_command(command_id, False, str(exc))
+        print(f"Command failed: {exc}")
+        _speak("오류가 발생했습니다. 잠시 후 다시 시도해 주세요.")
+        _report_state(LedState.IDLE)
+        return False
+
+    if command_id is not None:
+        complete_command(command_id, True)
+    return True
+
+
 def run_command_loop() -> None:
     _report_state(LedState.IDLE)
     last_connectivity_check = 0.0
@@ -254,29 +281,7 @@ def run_command_loop() -> None:
                 time.sleep(COMMAND_POLL_SECONDS)
                 continue
 
-            command_id = _command_id_from_command(command)
-            command_type = command.get("commandType") or command.get("command_type")
-            if command_type != "START_RECORDING":
-                logger.warning("Unknown command type from server: %r", command_type)
-                if command_id is not None:
-                    complete_command(command_id, False, f"Unknown command type: {command_type}")
-                continue
-
-            try:
-                run_once(conversation_id=_conversation_id_from_command(command))
-            except Exception as exc:
-                logger.exception("Command execution failed")
-                _report_state(LedState.ERROR)
-                _report_error("COMMAND_EXECUTION_FAILED", exc)
-                if command_id is not None:
-                    complete_command(command_id, False, str(exc))
-                print(f"Command failed: {exc}")
-                _speak("오류가 발생했습니다. 잠시 후 다시 시도해 주세요.")
-                _report_state(LedState.IDLE)
-                continue
-
-            if command_id is not None:
-                complete_command(command_id, True)
+            _execute_start_recording_command(command)
         except KeyboardInterrupt:
             _report_state(LedState.STOPPED)
             print("?꾨줈洹몃옩??醫낅즺?⑸땲??")
@@ -286,9 +291,20 @@ def run_command_loop() -> None:
 def run_button_loop() -> None:
     _report_state(LedState.IDLE)
     last_connectivity_check = 0.0
+    last_command_poll = 0.0
     while True:
         try:
             last_connectivity_check = _poll_connectivity(last_connectivity_check)
+
+            now = time.monotonic()
+            if now - last_command_poll >= COMMAND_POLL_SECONDS:
+                last_command_poll = now
+                command = fetch_next_command()
+                if command:
+                    logger.info("Server recording command received")
+                    _execute_start_recording_command(command)
+                    continue
+
             if nano_adapter is None:
                 time.sleep(0.2)
                 continue

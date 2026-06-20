@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertCircle, Bot, Lightbulb, Loader2, MicOff, RefreshCw } from "lucide-react";
+import { AlertCircle, Bot, Lightbulb, Loader2, Mic, RefreshCw } from "lucide-react";
 import { Comfortaa } from "next/font/google";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,9 @@ import { useChatSession } from "@/hooks/useChatSession";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
 import {
   DEFAULT_RASPBERRY_SERIAL,
+  getLatestDeviceCommand,
   listDevices,
+  startRaspberryRecording,
   type DeviceResponse,
 } from "@/lib/api/devices";
 import { ChatBubble } from "./ChatBubble";
@@ -43,6 +45,10 @@ export function ChatPage() {
   const [raspberryDeviceId, setRaspberryDeviceId] = useState<string | null>(null);
   const [raspberryDeviceStatus, setRaspberryDeviceStatus] = useState<string | null>(null);
   const [raspberryError, setRaspberryError] = useState<string | null>(null);
+  const [isRaspberryCommandPending, setIsRaspberryCommandPending] = useState(false);
+  const [isStartingRaspberry, setIsStartingRaspberry] = useState(false);
+  const lastRaspberryCommandStatusRef = useRef<string | null>(null);
+  const previousRaspberryStatusRef = useRef<string | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const chat = useChatSession();
   const {
@@ -56,6 +62,7 @@ export function ChatPage() {
     isReady,
     isThinking,
     messages,
+    refreshMessages,
     requestHint,
     retry,
     sendMessage,
@@ -68,23 +75,55 @@ export function ChatPage() {
   const voice = useVoiceInput({
     onTranscript: handleTranscript,
   });
+  const isRaspberryBusy =
+    isStartingRaspberry ||
+    isRaspberryCommandPending ||
+    raspberryDeviceStatus === "RECORDING" ||
+    raspberryDeviceStatus === "TRANSCRIBING" ||
+    raspberryDeviceStatus === "THINKING" ||
+    raspberryDeviceStatus === "SPEAKING" ||
+    raspberryDeviceStatus === "LOGGING";
   const raspberryStatusLabel = !raspberryDeviceId
     ? "라즈베리 없음"
     : raspberryDeviceStatus === "OFFLINE"
-        ? "오프라인"
-        : raspberryDeviceStatus === "RECORDING" || raspberryDeviceStatus === "TRANSCRIBING"
-          ? "응답 받는 중"
-          : raspberryDeviceStatus === "THINKING" ||
-              raspberryDeviceStatus === "SPEAKING" ||
-              raspberryDeviceStatus === "LOGGING"
-            ? "응답 중"
-            : "대기 중";
+      ? "오프라인"
+      : raspberryDeviceStatus === "RECORDING" || raspberryDeviceStatus === "TRANSCRIBING"
+        ? "듣는 중"
+        : raspberryDeviceStatus === "THINKING" ||
+            raspberryDeviceStatus === "SPEAKING" ||
+            raspberryDeviceStatus === "LOGGING"
+          ? "응답 중"
+          : "대기 중";
+  const raspberryButtonLabel = !raspberryDeviceId
+    ? "라즈베리 없음"
+    : isRaspberryBusy
+      ? raspberryStatusLabel
+      : "덕키와 대화하기";
   const isRaspberryButtonDisabled =
     !raspberryDeviceId ||
+    isRaspberryBusy ||
     isThinking ||
     isCompleted ||
     isLoadingSession ||
     !isReady;
+
+  const handleRaspberryTalk = useCallback(async () => {
+    if (!raspberryDeviceId || !activeSession.id || isRaspberryButtonDisabled) {
+      return;
+    }
+
+    setRaspberryError(null);
+    setIsStartingRaspberry(true);
+
+    try {
+      await startRaspberryRecording(raspberryDeviceId, activeSession.id);
+      setIsRaspberryCommandPending(true);
+    } catch (startError) {
+      setRaspberryError(getRaspberryErrorMessage(startError));
+      setIsStartingRaspberry(false);
+      setIsRaspberryCommandPending(false);
+    }
+  }, [activeSession.id, isRaspberryButtonDisabled, raspberryDeviceId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -147,6 +186,74 @@ export function ChatPage() {
     return () => window.clearInterval(timer);
   }, [raspberryDeviceId]);
 
+  useEffect(() => {
+    if (!raspberryDeviceId || !activeSession.id) {
+      return;
+    }
+
+    const pollCommand = () => {
+      void getLatestDeviceCommand(raspberryDeviceId)
+        .then(async (command) => {
+          if (!command) {
+            return;
+          }
+
+          const isActive =
+            command.status === "PENDING" || command.status === "CLAIMED";
+          setIsRaspberryCommandPending(isActive);
+
+          if (isActive) {
+            setIsStartingRaspberry(false);
+          }
+
+          if (
+            command.status === "COMPLETED" &&
+            lastRaspberryCommandStatusRef.current !== "COMPLETED"
+          ) {
+            await refreshMessages();
+            setIsStartingRaspberry(false);
+            setIsRaspberryCommandPending(false);
+          }
+
+          if (command.status === "FAILED") {
+            setRaspberryError(
+              command.errorMessage ??
+                "라즈베리 녹음 명령을 처리하지 못했습니다.",
+            );
+            setIsStartingRaspberry(false);
+            setIsRaspberryCommandPending(false);
+          }
+
+          lastRaspberryCommandStatusRef.current = command.status;
+        })
+        .catch((pollError) => {
+          setRaspberryError(getRaspberryErrorMessage(pollError));
+          setIsStartingRaspberry(false);
+          setIsRaspberryCommandPending(false);
+        });
+    };
+
+    pollCommand();
+    const timer = window.setInterval(pollCommand, 1500);
+
+    return () => window.clearInterval(timer);
+  }, [activeSession.id, raspberryDeviceId, refreshMessages]);
+
+  useEffect(() => {
+    const previousStatus = previousRaspberryStatusRef.current;
+    if (
+      previousStatus &&
+      previousStatus !== "IDLE" &&
+      raspberryDeviceStatus === "IDLE"
+    ) {
+      void refreshMessages();
+      setIsStartingRaspberry(false);
+      setIsRaspberryCommandPending(false);
+    }
+
+    previousRaspberryStatusRef.current = raspberryDeviceStatus;
+  }, [raspberryDeviceStatus, refreshMessages]);
+
   const hintPanel = (
     <HintPanel
       activeTitle={activeSession.title}
@@ -192,14 +299,18 @@ export function ChatPage() {
               <Button
                 type="button"
                 variant="outline"
-                title={`하드웨어 버튼 사용 (${raspberryStatusLabel})`}
-                aria-label={`하드웨어 버튼 사용 (${raspberryStatusLabel})`}
+                title={raspberryButtonLabel}
+                aria-label={raspberryButtonLabel}
                 disabled={isRaspberryButtonDisabled}
-                onClick={() => void retry()}
+                onClick={() => void handleRaspberryTalk()}
                 className="h-9 gap-2 border-[#E7DDC8] bg-white px-2.5 font-bold text-[#4A4438] hover:bg-[#FFF7E0] dark:border-white/10 dark:bg-[#24211D] dark:text-gray-200 dark:hover:bg-[#2A251D]"
               >
-                <MicOff className="size-4" aria-hidden="true" />
-                <span className="hidden sm:inline">{raspberryStatusLabel}</span>
+                {isRaspberryBusy ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Mic className="size-4" aria-hidden="true" />
+                )}
+                <span className="hidden sm:inline">{raspberryButtonLabel}</span>
               </Button>
 
               <Button

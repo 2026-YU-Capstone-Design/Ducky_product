@@ -29,6 +29,18 @@ def _require_command(command: str) -> None:
         raise AudioIOError(f"'{command}' 명령을 찾을 수 없습니다. 필요한 시스템 패키지를 설치해 주세요.")
 
 
+def _wrap_with_command_timeout(command: list[str], timeout_seconds: int) -> list[str]:
+    if shutil.which("timeout") is None:
+        return command
+    return [
+        "timeout",
+        "--signal=TERM",
+        "--kill-after=1",
+        str(timeout_seconds),
+        *command,
+    ]
+
+
 def _run_audio_command(
     command: list[str],
     action: str,
@@ -48,7 +60,10 @@ def _run_audio_command(
     except FileNotFoundError as exc:
         raise AudioIOError(f"{action} 명령을 실행할 수 없습니다: {command[0]}") from exc
     except subprocess.TimeoutExpired as exc:
-        raise AudioIOError(f"{action} 시간 초과 ({timeout:.0f}초)") from exc
+        raise AudioIOError(
+            f"{action} 응답 없음 (대기 한도 {timeout:.0f}초). "
+            "오디오 장치가 멈춰 있을 수 있습니다."
+        ) from exc
     except subprocess.CalledProcessError as exc:
         stderr = (exc.stderr or "").strip()
         message = stderr if stderr else f"exit code {exc.returncode}"
@@ -90,19 +105,23 @@ def record_audio(output_path: str, duration: int = 7) -> None:
             ]
         )
     command.extend(["-t", "wav", "-d", str(duration), str(output)])
+    command = _wrap_with_command_timeout(command, duration + 2)
 
     attempts = max(1, RECORD_RETRY_COUNT)
     last_error: AudioIOError | None = None
+    record_timeout = duration + RECORD_TIMEOUT_BUFFER_SECONDS
     for attempt in range(1, attempts + 1):
         try:
-            record_timeout = duration + RECORD_TIMEOUT_BUFFER_SECONDS
             _run_audio_command(command, "녹음", timeout=record_timeout)
             last_error = None
             break
         except AudioIOError as exc:
             last_error = exc
             if attempt >= attempts:
-                raise
+                raise AudioIOError(
+                    f"녹음 실패: arecord가 {duration}초 안에 끝나지 않았습니다. "
+                    f"MIC_DEVICE({MIC_DEVICE or 'default'})와 MIC_RECORD_FORMAT({MIC_RECORD_FORMAT or 'S16_LE'})를 확인해 주세요."
+                ) from exc
             logger.warning(
                 "녹음 실패 (%d/%d), %.1f초 후 재시도: %s",
                 attempt,

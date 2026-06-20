@@ -324,6 +324,25 @@ export function useChatSession({ enabled = true }: UseChatSessionOptions = {}) {
     }
   }, [activeSession.id, enabled, isThinking, status]);
 
+  const refreshMessages = useCallback(async () => {
+    if (!enabled || !activeSession.id || !getAccessToken()) {
+      return;
+    }
+
+    try {
+      const detail = await getConversation(activeSession.id);
+      const nextMessages = detail.messages.map((message) => toChatMessage(message));
+
+      setMessages(nextMessages);
+      setHintHistory(buildHintHistory(nextMessages));
+      setActiveSession(toSessionSummary(detail));
+      setStatus(toProgressStatus(detail.status));
+      setError(null);
+    } catch (refreshError) {
+      setError(getErrorMessage(refreshError));
+    }
+  }, [activeSession.id, enabled]);
+
   return {
     activeSession,
     completeSession,
@@ -335,6 +354,7 @@ export function useChatSession({ enabled = true }: UseChatSessionOptions = {}) {
     isReady,
     isThinking,
     messages,
+    refreshMessages,
     requestHint,
     retry: loadSession,
     sendMessage,
