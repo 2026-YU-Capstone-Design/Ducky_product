@@ -167,6 +167,7 @@ def _get_server_response(user_text: str, conversation_id: int | None = None) -> 
 def _speak(text: str) -> bool:
     try:
         synthesize_speech(text, RESPONSE_AUDIO_PATH)
+        logger.info("TTS 파일 생성 완료, 스피커 재생 시작")
         play_audio(RESPONSE_AUDIO_PATH)
     except Exception as exc:
         logger.exception("TTS or playback failed")
@@ -179,64 +180,67 @@ def _speak(text: str) -> bool:
 
 
 def run_once(conversation_id: int | None = None) -> bool:
-    _report_state(LedState.RECORDING)
-    print("듣고 있어요. 문제를 설명해 주세요.")
-    _speak("듣고 있어요. 문제를 설명해 주세요.")
-    if RECORD_DELAY_AFTER_SPEAK_SECONDS > 0:
-        time.sleep(RECORD_DELAY_AFTER_SPEAK_SECONDS)
+    try:
+        print("듣고 있어요. 문제를 설명해 주세요.")
+        _report_state(LedState.SPEAKING)
+        _speak("듣고 있어요. 문제를 설명해 주세요.")
+        if RECORD_DELAY_AFTER_SPEAK_SECONDS > 0:
+            time.sleep(RECORD_DELAY_AFTER_SPEAK_SECONDS)
 
-    record_audio(INPUT_AUDIO_PATH, duration=RECORD_SECONDS)
+        _report_state(LedState.RECORDING)
+        record_audio(INPUT_AUDIO_PATH, duration=RECORD_SECONDS)
 
-    stt_success = True
-    _report_state(LedState.TRANSCRIBING)
-    user_text = transcribe_audio(INPUT_AUDIO_PATH)
-    print(f"사용자: {user_text}")
+        stt_success = True
+        _report_state(LedState.TRANSCRIBING)
+        user_text = transcribe_audio(INPUT_AUDIO_PATH)
+        print(f"사용자: {user_text}")
 
-    server_response: dict[str, Any] = {}
+        server_response: dict[str, Any] = {}
 
-    if user_text == STT_FAILURE_MESSAGE:
-        stt_success = False
-        _report_state(LedState.ERROR)
-        _report_error("STT_FAILED", "Speech-to-text failed")
-        response_text = STT_FAILURE_MESSAGE
-    elif not user_text.strip():
-        stt_success = False
-        response_text = NO_SPEECH_MESSAGE
-    else:
-        _report_state(LedState.THINKING)
-        try:
-            response_text, server_response = _get_server_response(user_text, conversation_id=conversation_id)
-        except Exception:
+        if user_text == STT_FAILURE_MESSAGE:
+            stt_success = False
             _report_state(LedState.ERROR)
-            response_text = SERVER_FAILURE_MESSAGE
+            _report_error("STT_FAILED", "Speech-to-text failed")
+            response_text = STT_FAILURE_MESSAGE
+        elif not user_text.strip():
+            stt_success = False
+            response_text = NO_SPEECH_MESSAGE
+        else:
+            _report_state(LedState.THINKING)
+            try:
+                response_text, server_response = _get_server_response(user_text, conversation_id=conversation_id)
+            except Exception:
+                _report_state(LedState.ERROR)
+                response_text = SERVER_FAILURE_MESSAGE
 
-    print(f"서버: {response_text}")
+        print(f"서버: {response_text}")
 
-    _report_state(LedState.SPEAKING)
-    tts_success = _speak(response_text)
-    if server_response and tts_success:
-        report_tts_complete(_message_id_from_response(server_response))
+        _report_state(LedState.SPEAKING)
+        tts_success = _speak(response_text)
+        if server_response and tts_success:
+            report_tts_complete(_message_id_from_response(server_response))
 
-    if server_response and server_response.get("shouldSaveLog", True):
-        conversation_id = server_response.get("conversationId")
-        if conversation_id is not None and not isinstance(conversation_id, int):
-            logger.warning("Invalid conversationId from server: %r", conversation_id)
-            conversation_id = None
+        if server_response and server_response.get("shouldSaveLog", True):
+            conversation_id = server_response.get("conversationId")
+            if conversation_id is not None and not isinstance(conversation_id, int):
+                logger.warning("Invalid conversationId from server: %r", conversation_id)
+                conversation_id = None
 
-        _report_state(LedState.LOGGING)
-        saved = save_conversation_log(
-            conversation_id=conversation_id,
-            user_message=user_text,
-            assistant_message=response_text,
-            stt_success=stt_success,
-            tts_success=tts_success,
-        )
-        if not saved:
-            logger.info("Conversation log was not saved.")
-            _report_error("CONVERSATION_LOG_SAVE_FAILED", "Conversation log save failed")
+            _report_state(LedState.LOGGING)
+            saved = save_conversation_log(
+                conversation_id=conversation_id,
+                user_message=user_text,
+                assistant_message=response_text,
+                stt_success=stt_success,
+                tts_success=tts_success,
+            )
+            if not saved:
+                logger.info("Conversation log was not saved.")
+                _report_error("CONVERSATION_LOG_SAVE_FAILED", "Conversation log save failed")
 
-    _report_state(LedState.IDLE)
-    return True
+        return True
+    finally:
+        _report_state(LedState.IDLE)
 
 
 def run_command_loop() -> None:
@@ -268,6 +272,7 @@ def run_command_loop() -> None:
                     complete_command(command_id, False, str(exc))
                 print(f"Command failed: {exc}")
                 _speak("오류가 발생했습니다. 잠시 후 다시 시도해 주세요.")
+                _report_state(LedState.IDLE)
                 continue
 
             if command_id is not None:

@@ -8,8 +8,10 @@ from config import (
     MIC_CHANNELS,
     MIC_DEVICE,
     MIC_SAMPLE_RATE,
+    PLAYBACK_TIMEOUT_SECONDS,
     RECORD_RETRY_COUNT,
     RECORD_RETRY_DELAY_SECONDS,
+    RECORD_TIMEOUT_BUFFER_SECONDS,
     SPEAKER_DEVICE,
 )
 
@@ -26,17 +28,32 @@ def _require_command(command: str) -> None:
         raise AudioIOError(f"'{command}' 명령을 찾을 수 없습니다. 필요한 시스템 패키지를 설치해 주세요.")
 
 
-def _run_audio_command(command: list[str], action: str) -> None:
-    logger.debug("Running %s command: %s", action, " ".join(command))
+def _run_audio_command(
+    command: list[str],
+    action: str,
+    timeout: float | None = None,
+) -> None:
+    logger.info("%s 시작: %s", action, " ".join(command))
 
     try:
-        subprocess.run(command, check=True, capture_output=True, text=True)
+        subprocess.run(
+            command,
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=timeout,
+        )
     except FileNotFoundError as exc:
         raise AudioIOError(f"{action} 명령을 실행할 수 없습니다: {command[0]}") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise AudioIOError(f"{action} 시간 초과 ({timeout:.0f}초)") from exc
     except subprocess.CalledProcessError as exc:
         stderr = (exc.stderr or "").strip()
         message = stderr if stderr else f"exit code {exc.returncode}"
         raise AudioIOError(f"{action} 실패: {message}") from exc
+
+    logger.info("%s 완료", action)
 
 
 def record_audio(output_path: str, duration: int = 7) -> None:
@@ -77,7 +94,8 @@ def record_audio(output_path: str, duration: int = 7) -> None:
     last_error: AudioIOError | None = None
     for attempt in range(1, attempts + 1):
         try:
-            _run_audio_command(command, "녹음")
+            record_timeout = duration + RECORD_TIMEOUT_BUFFER_SECONDS
+            _run_audio_command(command, "녹음", timeout=record_timeout)
             last_error = None
             break
         except AudioIOError as exc:
@@ -108,7 +126,7 @@ def _play_wav(audio_path: Path) -> None:
         command.extend(["-D", SPEAKER_DEVICE])
     command.append(str(audio_path))
 
-    _run_audio_command(command, "재생")
+    _run_audio_command(command, "재생", timeout=PLAYBACK_TIMEOUT_SECONDS)
 
 
 def _play_with_mpg123(audio_path: Path) -> None:
@@ -118,14 +136,17 @@ def _play_with_mpg123(audio_path: Path) -> None:
     if SPEAKER_DEVICE:
         command.extend(["-a", SPEAKER_DEVICE])
     command.append(str(audio_path))
-    _run_audio_command(command, "재생")
+    _run_audio_command(command, "재생", timeout=PLAYBACK_TIMEOUT_SECONDS)
 
 
 def _play_with_ffplay(audio_path: Path) -> None:
     _require_command("ffplay")
 
-    command = ["ffplay", "-nodisp", "-autoexit", "-loglevel", "error", str(audio_path)]
-    _run_audio_command(command, "재생")
+    command = ["ffplay", "-nodisp", "-autoexit", "-loglevel", "error"]
+    if SPEAKER_DEVICE:
+        command.extend(["-ao", f"alsa:{SPEAKER_DEVICE}"])
+    command.append(str(audio_path))
+    _run_audio_command(command, "재생", timeout=PLAYBACK_TIMEOUT_SECONDS)
 
 
 def play_audio(audio_path: str) -> None:
