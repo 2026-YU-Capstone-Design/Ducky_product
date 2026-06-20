@@ -1,9 +1,17 @@
 import logging
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
-from config import MIC_DEVICE, SPEAKER_DEVICE
+from config import (
+    MIC_CHANNELS,
+    MIC_DEVICE,
+    MIC_SAMPLE_RATE,
+    RECORD_RETRY_COUNT,
+    RECORD_RETRY_DELAY_SECONDS,
+    SPEAKER_DEVICE,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -49,9 +57,44 @@ def record_audio(output_path: str, duration: int = 7) -> None:
     command = ["arecord"]
     if MIC_DEVICE:
         command.extend(["-D", MIC_DEVICE])
-    command.extend(["-f", "cd", "-t", "wav", "-d", str(duration), str(output)])
+    command.extend(
+        [
+            "-f",
+            "S16_LE",
+            "-r",
+            str(MIC_SAMPLE_RATE),
+            "-c",
+            str(MIC_CHANNELS),
+            "-t",
+            "wav",
+            "-d",
+            str(duration),
+            str(output),
+        ]
+    )
 
-    _run_audio_command(command, "녹음")
+    attempts = max(1, RECORD_RETRY_COUNT)
+    last_error: AudioIOError | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            _run_audio_command(command, "녹음")
+            last_error = None
+            break
+        except AudioIOError as exc:
+            last_error = exc
+            if attempt >= attempts:
+                raise
+            logger.warning(
+                "녹음 실패 (%d/%d), %.1f초 후 재시도: %s",
+                attempt,
+                attempts,
+                RECORD_RETRY_DELAY_SECONDS,
+                exc,
+            )
+            time.sleep(RECORD_RETRY_DELAY_SECONDS)
+
+    if last_error is not None:
+        raise last_error
 
     if not output.exists() or output.stat().st_size == 0:
         raise AudioIOError(f"녹음 파일이 생성되지 않았습니다: {output}")

@@ -13,6 +13,7 @@ from config import (
     NANO_SERIAL_TIMEOUT_SECONDS,
     NO_SPEECH_MESSAGE,
     OFFLINE_TIMEOUT_SECONDS,
+    RECORD_DELAY_AFTER_SPEAK_SECONDS,
     RECORD_SECONDS,
     RESPONSE_AUDIO_PATH,
     RUN_CONTINUOUSLY,
@@ -181,6 +182,8 @@ def run_once(conversation_id: int | None = None) -> bool:
     _report_state(LedState.RECORDING)
     print("듣고 있어요. 문제를 설명해 주세요.")
     _speak("듣고 있어요. 문제를 설명해 주세요.")
+    if RECORD_DELAY_AFTER_SPEAK_SECONDS > 0:
+        time.sleep(RECORD_DELAY_AFTER_SPEAK_SECONDS)
 
     record_audio(INPUT_AUDIO_PATH, duration=RECORD_SECONDS)
 
