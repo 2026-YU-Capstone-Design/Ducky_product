@@ -4,9 +4,15 @@ from typing import Any
 
 from audio_io import play_audio, record_audio
 from config import (
-    INPUT_AUDIO_PATH,
     COMMAND_POLL_SECONDS,
+    CONNECTIVITY_POLL_SECONDS,
+    INPUT_AUDIO_PATH,
+    NANO_RECONNECT_SECONDS,
+    NANO_SERIAL_BAUD_RATE,
+    NANO_SERIAL_PORT,
+    NANO_SERIAL_TIMEOUT_SECONDS,
     NO_SPEECH_MESSAGE,
+    OFFLINE_TIMEOUT_SECONDS,
     RECORD_SECONDS,
     RESPONSE_AUDIO_PATH,
     RUN_CONTINUOUSLY,
@@ -18,24 +24,94 @@ from config import (
     validate_required_environment,
 )
 from led_state import LedState
+from nano_serial import NanoSerialAdapter
 from server_client import (
+    check_server_health,
     complete_command,
     fetch_next_command,
+    get_offline_duration,
+    is_server_online,
     report_iot_error,
     report_iot_state,
     report_tts_complete,
     save_conversation_log,
     send_message_to_server,
+    set_connection_state_callback,
 )
 from stt import transcribe_audio
 from tts import synthesize_speech
 
 
 logger = logging.getLogger(__name__)
+nano_adapter: NanoSerialAdapter | None = None
+_is_offline_led_active = False
+_active_led_states = {
+    LedState.RECORDING,
+    LedState.TRANSCRIBING,
+    LedState.SPEAKING,
+}
+
+
+def _should_show_offline_led() -> bool:
+    return (
+        not is_server_online()
+        and get_offline_duration() >= OFFLINE_TIMEOUT_SECONDS
+    )
+
+
+def _nano_led_label_for_state(state: LedState) -> str:
+    if state in {LedState.RECORDING, LedState.TRANSCRIBING}:
+        return "LISTENING"
+    if state == LedState.SPEAKING:
+        return "RESPONDING"
+    if state == LedState.OFFLINE:
+        return "OFFLINE"
+    if _should_show_offline_led() and state not in _active_led_states:
+        return "OFFLINE"
+    return "IDLE"
 
 
 def _report_state(state: LedState) -> None:
+    global _is_offline_led_active
+    if nano_adapter is not None:
+        led_label = _nano_led_label_for_state(state)
+        nano_adapter.send_led_state(led_label)
+        _is_offline_led_active = led_label == "OFFLINE"
     report_iot_state(state)
+
+
+def _handle_connection_state(online: bool, failed_seconds: float) -> None:
+    global _is_offline_led_active
+    if nano_adapter is None:
+        return
+    if online:
+        if _is_offline_led_active:
+            nano_adapter.send_led_state("IDLE")
+        _is_offline_led_active = False
+        return
+
+    if failed_seconds >= OFFLINE_TIMEOUT_SECONDS:
+        nano_adapter.send_led_state("OFFLINE")
+        _is_offline_led_active = True
+
+
+def _init_nano_adapter() -> None:
+    global nano_adapter
+    nano_adapter = NanoSerialAdapter(
+        port=NANO_SERIAL_PORT,
+        baud_rate=NANO_SERIAL_BAUD_RATE,
+        timeout_seconds=NANO_SERIAL_TIMEOUT_SECONDS,
+        reconnect_seconds=NANO_RECONNECT_SECONDS,
+    )
+
+
+def _poll_connectivity(last_check_at: float) -> float:
+    now = time.monotonic()
+    if now - last_check_at < CONNECTIVITY_POLL_SECONDS:
+        return last_check_at
+
+    check_server_health()
+    return now
 
 
 def _report_error(error_code: str, error: object) -> None:
@@ -102,10 +178,10 @@ def _speak(text: str) -> bool:
 
 
 def run_once(conversation_id: int | None = None) -> bool:
+    _report_state(LedState.RECORDING)
     print("듣고 있어요. 문제를 설명해 주세요.")
     _speak("듣고 있어요. 문제를 설명해 주세요.")
-    
-    _report_state(LedState.RECORDING)
+
     record_audio(INPUT_AUDIO_PATH, duration=RECORD_SECONDS)
 
     stt_success = True
@@ -162,8 +238,10 @@ def run_once(conversation_id: int | None = None) -> bool:
 
 def run_command_loop() -> None:
     _report_state(LedState.IDLE)
+    last_connectivity_check = 0.0
     while True:
         try:
+            last_connectivity_check = _poll_connectivity(last_connectivity_check)
             command = fetch_next_command()
             if not command:
                 time.sleep(COMMAND_POLL_SECONDS)
@@ -197,9 +275,40 @@ def run_command_loop() -> None:
             break
 
 
+def run_button_loop() -> None:
+    _report_state(LedState.IDLE)
+    last_connectivity_check = 0.0
+    while True:
+        try:
+            last_connectivity_check = _poll_connectivity(last_connectivity_check)
+            if nano_adapter is None:
+                time.sleep(0.2)
+                continue
+
+            if not nano_adapter.read_button_event():
+                time.sleep(0.05)
+                continue
+
+            logger.info("Nano button pressed; starting voice run")
+            run_once()
+        except KeyboardInterrupt:
+            _report_state(LedState.STOPPED)
+            print("프로그램을 종료합니다.")
+            break
+        except Exception as exc:
+            logger.exception("Button-triggered run failed")
+            _report_state(LedState.ERROR)
+            _report_error("BUTTON_TRIGGER_FAILED", exc)
+            print(f"오류 발생: {exc}")
+            _speak("오류가 발생했습니다. 잠시 후 다시 시도해 주세요.")
+            _report_state(LedState.IDLE)
+
+
 def main() -> None:
+    global nano_adapter
     configure_logging()
     ensure_runtime_dirs()
+    set_connection_state_callback(_handle_connection_state)
     _report_state(LedState.BOOTING)
 
     try:
@@ -208,6 +317,13 @@ def main() -> None:
         _report_state(LedState.ERROR)
         _report_error("CONFIGURATION_ERROR", exc)
         print(exc)
+        return
+
+    _init_nano_adapter()
+    check_server_health()
+
+    if TRIGGER_MODE == "button":
+        run_button_loop()
         return
 
     if TRIGGER_MODE == "command":
@@ -219,8 +335,10 @@ def main() -> None:
         _report_state(LedState.STOPPED)
         return
 
+    last_connectivity_check = 0.0
     while True:
         try:
+            last_connectivity_check = _poll_connectivity(last_connectivity_check)
             run_once()
         except KeyboardInterrupt:
             _report_state(LedState.STOPPED)
