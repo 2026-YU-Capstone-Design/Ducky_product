@@ -7,6 +7,7 @@ from pathlib import Path
 from config import (
     MIC_CHANNELS,
     MIC_DEVICE,
+    MIC_RECORD_FORMAT,
     MIC_SAMPLE_RATE,
     PLAYBACK_TIMEOUT_SECONDS,
     RECORD_RETRY_COUNT,
@@ -74,21 +75,21 @@ def record_audio(output_path: str, duration: int = 7) -> None:
     command = ["arecord"]
     if MIC_DEVICE:
         command.extend(["-D", MIC_DEVICE])
-    command.extend(
-        [
-            "-f",
-            "S16_LE",
-            "-r",
-            str(MIC_SAMPLE_RATE),
-            "-c",
-            str(MIC_CHANNELS),
-            "-t",
-            "wav",
-            "-d",
-            str(duration),
-            str(output),
-        ]
-    )
+    record_format = MIC_RECORD_FORMAT.strip().lower()
+    if record_format not in {"", "none", "off"}:
+        command.extend(["-f", MIC_RECORD_FORMAT.strip()])
+    else:
+        command.extend(
+            [
+                "-f",
+                "S16_LE",
+                "-r",
+                str(MIC_SAMPLE_RATE),
+                "-c",
+                str(MIC_CHANNELS),
+            ]
+        )
+    command.extend(["-t", "wav", "-d", str(duration), str(output)])
 
     attempts = max(1, RECORD_RETRY_COUNT)
     last_error: AudioIOError | None = None
