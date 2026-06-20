@@ -21,7 +21,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { useSessionHistory } from "@/hooks/useSessionHistory";
 import type { ChatMessage } from "@/types/chat";
 import type { Session, SessionStatus } from "@/types/session";
@@ -101,8 +100,8 @@ function SessionMessage({ message }: { message: ChatMessage }) {
 
 function SessionDetail({ session }: { session: Session }) {
   return (
-    <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden p-5">
-      <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-3">
+    <div className="p-5">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Card className="rounded-lg border border-[#E7DDC8] bg-[#FAF8F5] py-0 dark:border-white/10 dark:bg-[#24211D]">
           <CardContent className="p-3">
             <p className="text-xs text-gray-500 dark:text-gray-400">상태</p>
@@ -152,7 +151,7 @@ function SessionDetail({ session }: { session: Session }) {
         </dl>
       </div>
 
-      <div className="mt-5 flex min-h-0 flex-1 flex-col">
+      <div className="mt-5">
         <div className="flex items-center justify-between gap-3">
           <h3 className="text-sm font-bold text-gray-950 dark:text-white">
             대화 내역
@@ -161,13 +160,11 @@ function SessionDetail({ session }: { session: Session }) {
             {session.messages.length}개
           </span>
         </div>
-        <ScrollArea className="mt-3 min-h-[14rem] flex-1 rounded-lg border border-[#E7DDC8] bg-[#FAF8F5] dark:border-white/10 dark:bg-[#1D1B18] sm:min-h-[20rem]">
-          <div className="space-y-3 p-3 sm:p-4">
-            {session.messages.map((message) => (
-              <SessionMessage key={message.id} message={message} />
-            ))}
-          </div>
-        </ScrollArea>
+        <div className="mt-3 space-y-3 rounded-lg border border-[#E7DDC8] bg-[#FAF8F5] p-3 dark:border-white/10 dark:bg-[#1D1B18] sm:p-4">
+          {session.messages.map((message) => (
+            <SessionMessage key={message.id} message={message} />
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -324,7 +321,7 @@ export function SessionHistory() {
           if (!open) setSelectedSession(null);
         }}
       >
-        <DialogContent className="flex max-h-[92dvh] min-h-[min(42rem,92dvh)] w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden rounded-lg p-0 dark:border-white/10 dark:bg-[#201D19] sm:max-w-4xl">
+        <DialogContent className="flex max-h-[92dvh] w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden rounded-lg p-0 dark:border-white/10 dark:bg-[#201D19] sm:min-h-[min(42rem,92dvh)] sm:max-w-4xl">
           {selectedSession && (
             <>
               <DialogHeader className="shrink-0 border-b border-[#E7DDC8] p-5 pr-12 dark:border-white/10">
@@ -359,12 +356,14 @@ export function SessionHistory() {
               </DialogHeader>
 
               {isLoadingDetail ? (
-                <div className="flex min-h-[24rem] flex-1 items-center justify-center gap-2 p-8 text-sm text-gray-500 dark:text-gray-400">
+                <div className="flex min-h-[16rem] flex-1 items-center justify-center gap-2 p-8 text-sm text-gray-500 dark:text-gray-400">
                   <Loader2 className="size-4 animate-spin text-[#B88700]" />
                   대화 내역을 불러오는 중입니다.
                 </div>
               ) : (
-                <SessionDetail session={selectedSession} />
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain touch-pan-y">
+                  <SessionDetail session={selectedSession} />
+                </div>
               )}
             </>
           )}
