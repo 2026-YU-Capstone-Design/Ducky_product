@@ -78,7 +78,24 @@ class ChatResponseServicePromptTest {
                 .contains("pm2 restart")
                 .contains("애플리케이션_이름")
                 .contains("이름을 몰라")
-                .contains("짧은 후속 질문은 현재 세션 전체 대화 기록에서 지시 대상을 찾아 답한다");
+                .contains("짧은 후속 질문은 현재 세션 전체 대화 기록에서 지시 대상을 찾되");
+    }
+
+    @Test
+    void turnPromptEnforcesRubberDuckQuestionOnlyGuidance() {
+        String prompt = chatResponseService.buildTurnPrompt(
+                "교환 정렬이 뭐야?",
+                userWithLearningStyle("active", "visual", "sequential"),
+                "",
+                List.of(),
+                null
+        );
+
+        assertThat(prompt)
+                .contains("정답 설명·원인 단정 금지")
+                .contains("질문으로 끌고 가서 사용자가 말하게 만든다")
+                .contains("러버덕 모드 응답은 질문으로 끝낸다")
+                .doesNotContain("짧은 설명 + 스스로 점검할 질문");
     }
 
     @Test
@@ -101,7 +118,7 @@ class ChatResponseServicePromptTest {
                 .contains("- 처리 방식: reflective")
                 .contains("- 표현 선호: verbal")
                 .contains("- 이해 구조: global")
-                .contains("전체 그림을 먼저 잡고 세부 단계로 내려간다");
+                .contains("전체 그림부터 스스로 잡게 한 뒤 세부로 내려가게 질문으로 이끈다");
     }
 
     @Test
@@ -134,6 +151,7 @@ class ChatResponseServicePromptTest {
                 .contains("장점 FIFO 같아")
                 .contains("이미 제공한 힌트")
                 .contains("비교가 일어나는 위치")
+                .contains("원인 단정")
                 .contains("\"힌트 1:\" 같은 번호, 제목, 머리말을 붙이지 마");
     }
 
