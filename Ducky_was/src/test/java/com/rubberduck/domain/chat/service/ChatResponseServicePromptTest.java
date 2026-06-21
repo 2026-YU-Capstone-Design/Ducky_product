@@ -92,8 +92,10 @@ class ChatResponseServicePromptTest {
         );
 
         assertThat(prompt)
-                .contains("정답 설명·원인 단정 금지")
-                .contains("질문으로 끌고 가서 사용자가 말하게 만든다")
+                .contains("설명형 튜터가 아니라")
+                .contains("range(n)의 경우 0부터 n-1까지")
+                .contains("이 부분에서 오류가 발생했을 수 있습니다")
+                .contains("질문 ⭕")
                 .contains("러버덕 모드 응답은 질문으로 끝낸다")
                 .doesNotContain("짧은 설명 + 스스로 점검할 질문");
     }
@@ -151,7 +153,8 @@ class ChatResponseServicePromptTest {
                 .contains("장점 FIFO 같아")
                 .contains("이미 제공한 힌트")
                 .contains("비교가 일어나는 위치")
-                .contains("원인 단정")
+                .contains("range(n)의 경우 0부터 n-1까지")
+                .contains("이 부분에서 오류가 발생했을 수 있습니다")
                 .contains("\"힌트 1:\" 같은 번호, 제목, 머리말을 붙이지 마");
     }
 
