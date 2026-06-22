@@ -29,6 +29,7 @@ from nano_serial import NanoSerialAdapter
 from server_client import (
     check_server_health,
     complete_command,
+    fetch_active_conversation_id,
     fetch_next_command,
     get_offline_duration,
     is_server_online,
@@ -179,7 +180,8 @@ def _speak(text: str) -> bool:
     return True
 
 
-def run_once(conversation_id: int | None = None) -> bool:
+def run_once(conversation_id: int | None = None) -> int | None:
+    resolved_conversation_id = conversation_id
     try:
         print("듣고 있어요. 문제를 설명해 주세요.")
         _report_state(LedState.SPEAKING)
@@ -221,14 +223,11 @@ def run_once(conversation_id: int | None = None) -> bool:
             report_tts_complete(_message_id_from_response(server_response))
 
         if server_response and server_response.get("shouldSaveLog", True):
-            conversation_id = server_response.get("conversationId")
-            if conversation_id is not None and not isinstance(conversation_id, int):
-                logger.warning("Invalid conversationId from server: %r", conversation_id)
-                conversation_id = None
+            resolved_conversation_id = _int_from_value(server_response.get("conversationId")) or conversation_id
 
             _report_state(LedState.LOGGING)
             saved = save_conversation_log(
-                conversation_id=conversation_id,
+                conversation_id=resolved_conversation_id,
                 user_message=user_text,
                 assistant_message=response_text,
                 stt_success=stt_success,
@@ -238,22 +237,23 @@ def run_once(conversation_id: int | None = None) -> bool:
                 logger.info("Conversation log was not saved.")
                 _report_error("CONVERSATION_LOG_SAVE_FAILED", "Conversation log save failed")
 
-        return True
+        return resolved_conversation_id
     finally:
         _report_state(LedState.IDLE)
 
 
-def _execute_start_recording_command(command: dict[str, Any]) -> bool:
+def _execute_start_recording_command(command: dict[str, Any]) -> int | None:
     command_id = _command_id_from_command(command)
     command_type = command.get("commandType") or command.get("command_type")
+    conversation_id = _conversation_id_from_command(command)
     if command_type != "START_RECORDING":
         logger.warning("Unknown command type from server: %r", command_type)
         if command_id is not None:
             complete_command(command_id, False, f"Unknown command type: {command_type}")
-        return False
+        return conversation_id
 
     try:
-        run_once(conversation_id=_conversation_id_from_command(command))
+        resolved_conversation_id = run_once(conversation_id=conversation_id)
     except Exception as exc:
         logger.exception("Command execution failed")
         _report_state(LedState.ERROR)
@@ -263,11 +263,11 @@ def _execute_start_recording_command(command: dict[str, Any]) -> bool:
         print(f"Command failed: {exc}")
         _speak("오류가 발생했습니다. 잠시 후 다시 시도해 주세요.")
         _report_state(LedState.IDLE)
-        return False
+        return conversation_id
 
     if command_id is not None:
         complete_command(command_id, True)
-    return True
+    return resolved_conversation_id or conversation_id
 
 
 def run_command_loop() -> None:
@@ -292,6 +292,7 @@ def run_button_loop() -> None:
     _report_state(LedState.IDLE)
     last_connectivity_check = 0.0
     last_command_poll = 0.0
+    active_conversation_id: int | None = None
     while True:
         try:
             last_connectivity_check = _poll_connectivity(last_connectivity_check)
@@ -302,7 +303,7 @@ def run_button_loop() -> None:
                 command = fetch_next_command()
                 if command:
                     logger.info("Server recording command received")
-                    _execute_start_recording_command(command)
+                    active_conversation_id = _execute_start_recording_command(command) or active_conversation_id
                     continue
 
             if nano_adapter is None:
@@ -314,7 +315,10 @@ def run_button_loop() -> None:
                 continue
 
             logger.info("Nano button pressed; starting voice run")
-            run_once()
+            fetched_conversation_id = fetch_active_conversation_id()
+            if fetched_conversation_id is not None:
+                active_conversation_id = fetched_conversation_id
+            active_conversation_id = run_once(conversation_id=active_conversation_id) or active_conversation_id
         except KeyboardInterrupt:
             _report_state(LedState.STOPPED)
             print("프로그램을 종료합니다.")

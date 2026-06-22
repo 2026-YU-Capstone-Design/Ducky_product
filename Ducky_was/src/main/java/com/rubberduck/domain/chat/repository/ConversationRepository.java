@@ -5,6 +5,7 @@ import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import com.rubberduck.domain.chat.entity.Conversation;
+import com.rubberduck.domain.device.entity.Device;
 import com.rubberduck.domain.user.entity.User;
 
 public interface ConversationRepository extends JpaRepository<Conversation, Long> {
@@ -12,4 +13,6 @@ public interface ConversationRepository extends JpaRepository<Conversation, Long
     List<Conversation> findByUserOrderByUpdatedAtDesc(User user);
 
     java.util.Optional<Conversation> findFirstByUserAndStatusOrderByUpdatedAtDesc(User user, String status);
+
+    java.util.Optional<Conversation> findFirstByDeviceAndStatusOrderByUpdatedAtDesc(Device device, String status);
 }

@@ -221,6 +221,43 @@ def complete_command(command_id: int, success: bool, error_message: str | None =
     return True
 
 
+def fetch_active_conversation_id() -> int | None:
+    """
+    Fetch the active in-progress conversation for this device.
+    Return None when unavailable instead of raising.
+    """
+    try:
+        response = requests.get(
+            _url("/api/duck/active-conversation"),
+            params={"deviceId": DEVICE_ID, "userId": USER_ID},
+            timeout=IOT_EVENT_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        data = response.json()
+    except requests.RequestException:
+        logger.info("Active conversation lookup failed", exc_info=True)
+        _mark_server_fail()
+        return None
+    except ValueError:
+        logger.info("Active conversation response was not JSON", exc_info=True)
+        _mark_server_fail()
+        return None
+
+    if not isinstance(data, dict):
+        return None
+
+    raw_conversation_id = data.get("conversationId")
+    if isinstance(raw_conversation_id, int):
+        _mark_server_ok()
+        return raw_conversation_id
+    if isinstance(raw_conversation_id, str) and raw_conversation_id.isdigit():
+        _mark_server_ok()
+        return int(raw_conversation_id)
+
+    _mark_server_ok()
+    return None
+
+
 def send_message_to_server(user_text: str, conversation_id: int | None = None) -> dict[str, Any]:
     """
     Send transcribed user text to the Spring Boot server and return JSON.

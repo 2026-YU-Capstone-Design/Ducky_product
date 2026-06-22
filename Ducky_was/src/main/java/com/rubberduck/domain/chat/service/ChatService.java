@@ -2,6 +2,7 @@ package com.rubberduck.domain.chat.service;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,6 +19,8 @@ import com.rubberduck.domain.chat.repository.ChatMessageRepository;
 import com.rubberduck.domain.chat.repository.ConversationRepository;
 import com.rubberduck.domain.chat.service.ChatResponseService.AiReply;
 import com.rubberduck.domain.device.entity.Device;
+import com.rubberduck.domain.device.entity.DeviceCommand;
+import com.rubberduck.domain.device.repository.DeviceCommandRepository;
 import com.rubberduck.domain.device.service.DeviceService;
 import com.rubberduck.domain.document.service.DocumentService;
 import com.rubberduck.domain.user.entity.User;
@@ -33,6 +36,7 @@ public class ChatService {
 
     private final ConversationRepository conversationRepository;
     private final ChatMessageRepository chatMessageRepository;
+    private final DeviceCommandRepository deviceCommandRepository;
     private final DeviceService deviceService;
     private final UserService userService;
     private final ChatResponseService chatResponseService;
@@ -91,10 +95,7 @@ public class ChatService {
         } else {
             user = deviceService.findLinkedUser(device)
                     .orElseGet(() -> userService.findOrCreateExternalUser(externalUserId));
-            conversation = conversationRepository.findFirstByUserAndStatusOrderByUpdatedAtDesc(user, "in_progress")
-                    .orElseGet(() -> conversationRepository.save(
-                            Conversation.start(user, device, null, "Raspberry voice session", "음성 러버덕 질문 연결")
-                    ));
+            conversation = resolveOrCreateDeviceConversation(device, user);
         }
 
         if (conversation.getDevice() == null) {
@@ -102,6 +103,14 @@ public class ChatService {
         }
 
         return appendUserTurn(user, conversation, messageText, inputType == null ? "voice" : inputType, learningType);
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<Long> findActiveConversationId(String deviceSerial, String externalUserId) {
+        Device device = deviceService.findOrCreateBySerial(deviceSerial);
+        User user = deviceService.findLinkedUser(device)
+                .orElseGet(() -> userService.findOrCreateExternalUser(externalUserId));
+        return findActiveDeviceConversation(device, user).map(Conversation::getId);
     }
 
     @Transactional
@@ -257,6 +266,38 @@ public class ChatService {
         ensureOwner(conversation, user);
         chatMessageRepository.deleteByConversation(conversation);
         conversationRepository.delete(conversation);
+    }
+
+    private Conversation resolveOrCreateDeviceConversation(Device device, User user) {
+        return findActiveDeviceConversation(device, user)
+                .orElseGet(() -> conversationRepository.save(
+                        Conversation.start(user, device, null, "Raspberry voice session", "음성 러버덕 질문 연결")
+                ));
+    }
+
+    private Optional<Conversation> findActiveDeviceConversation(Device device, User user) {
+        Optional<Conversation> byDevice = conversationRepository
+                .findFirstByDeviceAndStatusOrderByUpdatedAtDesc(device, "in_progress")
+                .filter(conversation -> belongsToUser(conversation, user));
+        if (byDevice.isPresent()) {
+            return byDevice;
+        }
+
+        Optional<Conversation> byUser = conversationRepository
+                .findFirstByUserAndStatusOrderByUpdatedAtDesc(user, "in_progress");
+        if (byUser.isPresent()) {
+            return byUser;
+        }
+
+        return deviceCommandRepository.findFirstByDeviceOrderByCreatedAtDesc(device)
+                .map(DeviceCommand::getConversationId)
+                .flatMap(conversationRepository::findById)
+                .filter(conversation -> "in_progress".equals(conversation.getStatus()))
+                .filter(conversation -> belongsToUser(conversation, user));
+    }
+
+    private boolean belongsToUser(Conversation conversation, User user) {
+        return conversation.getUser().getId().equals(user.getId());
     }
 
     private Conversation getConversationEntity(Long conversationId) {

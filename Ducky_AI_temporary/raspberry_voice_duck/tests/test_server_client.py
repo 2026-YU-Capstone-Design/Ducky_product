@@ -127,6 +127,29 @@ class ServerClientTelemetryTest(unittest.TestCase):
             timeout=2.0,
         )
 
+    def test_fetch_active_conversation_id_returns_conversation_id(self) -> None:
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = {"conversationId": 12}
+
+        with patch.object(server_client.requests, "get", return_value=response) as get:
+            conversation_id = server_client.fetch_active_conversation_id()
+
+        self.assertEqual(12, conversation_id)
+        get.assert_called_once_with(
+            "http://localhost:8080/api/duck/active-conversation",
+            params={"deviceId": "raspberry-duck-001", "userId": "test-user"},
+            timeout=2.0,
+        )
+
+    def test_fetch_active_conversation_id_returns_none_when_missing(self) -> None:
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = {"conversationId": None}
+
+        with patch.object(server_client.requests, "get", return_value=response):
+            self.assertIsNone(server_client.fetch_active_conversation_id())
+
     def test_send_message_to_server_includes_conversation_id(self) -> None:
         response = Mock()
         response.raise_for_status.return_value = None

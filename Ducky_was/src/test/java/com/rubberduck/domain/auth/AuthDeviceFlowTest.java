@@ -272,6 +272,47 @@ class AuthDeviceFlowTest {
     }
 
     @Test
+    void activeConversationEndpointReturnsLinkedUserInProgressSession() throws Exception {
+        String suffix = String.valueOf(System.nanoTime());
+        String email = "active-conversation-" + suffix + "@example.com";
+        String loginId = "active" + suffix;
+        String password = "Ducky123!";
+
+        JsonNode signupData = signupUser(email, loginId, password);
+        String userId = signupData.get("userInfo").get("id").asText();
+        String accessToken = signupData.get("accessToken").asText();
+
+        MvcResult deviceResult = mockMvc.perform(post("/api/devices")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "serial_number", "raspberry-duck-active-" + suffix,
+                                "firmware_version", "0.1.0"
+                        ))))
+                .andExpect(status().isOk())
+                .andReturn();
+        String deviceId = readData(deviceResult).get("id").asText();
+        String deviceSerial = readData(deviceResult).get("serialNumber").asText();
+        linkDevice(deviceId, userId);
+
+        MvcResult conversationResult = mockMvc.perform(post("/api/chat/conversations")
+                        .header("Authorization", "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "title", "Web learning session",
+                                "topic", "Button sync"
+                        ))))
+                .andExpect(status().isOk())
+                .andReturn();
+        Long conversationId = readData(conversationResult).get("id").asLong();
+
+        mockMvc.perform(get("/api/duck/active-conversation")
+                        .param("deviceId", deviceSerial)
+                        .param("userId", userId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.conversationId").value(conversationId));
+    }
+
+    @Test
     void kakaoLoginCreatesSocialUserAndReusesExistingAccount() throws Exception {
         String suffix = String.valueOf(System.nanoTime());
         String code = "kakao-code-" + suffix;

@@ -1,11 +1,14 @@
 package com.rubberduck.domain.chat.controller;
 
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.rubberduck.domain.chat.dto.ChatTurnResponse;
+import com.rubberduck.domain.chat.dto.DuckActiveConversationResponse;
 import com.rubberduck.domain.chat.dto.DuckConversationLogRequest;
 import com.rubberduck.domain.chat.dto.DuckConversationLogResponse;
 import com.rubberduck.domain.chat.dto.DuckConversationRequest;
@@ -22,6 +25,16 @@ public class DuckCompatibilityController {
 
     private final ChatService chatService;
     private final IotService iotService;
+
+    @GetMapping("/active-conversation")
+    public DuckActiveConversationResponse activeConversation(
+            @RequestParam String deviceId,
+            @RequestParam(required = false) String userId
+    ) {
+        return chatService.findActiveConversationId(deviceId, userId)
+                .map(DuckActiveConversationResponse::new)
+                .orElseGet(() -> new DuckActiveConversationResponse(null));
+    }
 
     @PostMapping("/conversation")
     public DuckConversationResponse conversation(@RequestBody DuckConversationRequest request) {
