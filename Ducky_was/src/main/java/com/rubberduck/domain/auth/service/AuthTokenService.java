@@ -1,8 +1,11 @@
 package com.rubberduck.domain.auth.service;
 
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.HexFormat;
 import java.util.Optional;
 
 import javax.crypto.Mac;
@@ -42,7 +45,7 @@ public class AuthTokenService {
             token = token.substring(7).trim();
         }
 
-        String[] parts = token.split("\\.");
+        String[] parts = token.split("\\.", -1);
         if (parts.length != 3 || !"ducky".equals(parts[0])) {
             return Optional.empty();
         }
@@ -59,13 +62,22 @@ public class AuthTokenService {
             }
 
             long expiresAt = Long.parseLong(payloadParts[1]);
-            if (Instant.now().getEpochSecond() > expiresAt) {
+            if (Instant.now().getEpochSecond() >= expiresAt) {
                 return Optional.empty();
             }
 
             return Optional.of(Long.parseLong(payloadParts[0]));
         } catch (IllegalArgumentException ex) {
             return Optional.empty();
+        }
+    }
+
+    public static String hashDeviceKey(String key) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(key.getBytes(StandardCharsets.US_ASCII));
+            return HexFormat.of().formatHex(digest);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
         }
     }
 

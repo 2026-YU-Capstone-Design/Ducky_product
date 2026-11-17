@@ -4,7 +4,6 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { loginWithNaver } from "@/lib/api/auth";
-import { ensureDefaultRaspberryLinked } from "@/lib/api/devices";
 import { getNaverRedirectUri, NAVER_OAUTH_STATE_KEY } from "@/lib/auth/naver";
 import { defaultUser, USER_STORAGE_KEY } from "@/lib/auth/storage";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
@@ -55,11 +54,6 @@ function NaverCallbackContent() {
         }
 
         setUser(user);
-        try {
-          await ensureDefaultRaspberryLinked(user.id);
-        } catch (deviceLinkError) {
-          console.warn("Default Raspberry link failed", deviceLinkError);
-        }
 
         router.replace(user.onboarded ? "/dashboard" : "/onboarding");
       } catch (error) {

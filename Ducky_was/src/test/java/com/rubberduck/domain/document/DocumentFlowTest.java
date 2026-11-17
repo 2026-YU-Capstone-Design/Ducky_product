@@ -22,38 +22,24 @@ import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.apache.poi.xslf.usermodel.XMLSlideShow;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
-import org.junit.jupiter.api.BeforeEach;
+import com.rubberduck.support.ApiFlowTest;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
-import org.springframework.test.web.servlet.setup.MockMvcBuilders;
-import org.springframework.web.context.WebApplicationContext;
 
 @SpringBootTest
 @ActiveProfiles("test")
-class DocumentFlowTest {
+class DocumentFlowTest extends ApiFlowTest {
 
     private static final String DOCX_CONTENT_TYPE =
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
     private static final String PPTX_CONTENT_TYPE =
             "application/vnd.openxmlformats-officedocument.presentationml.presentation";
 
-    @Autowired
-    private WebApplicationContext context;
-
     private final ObjectMapper objectMapper = new ObjectMapper();
-
-    private MockMvc mockMvc;
-
-    @BeforeEach
-    void setUp() {
-        mockMvc = MockMvcBuilders.webAppContextSetup(context).build();
-    }
 
     @Test
     void uploadSearchChatContextAndDeleteFlow() throws Exception {

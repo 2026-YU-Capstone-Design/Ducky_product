@@ -16,6 +16,9 @@ import com.rubberduck.domain.chat.dto.DuckConversationResponse;
 import com.rubberduck.domain.chat.service.ChatService;
 import com.rubberduck.domain.iot.service.IotService;
 
+import com.rubberduck.domain.device.entity.DeviceUser;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+
 import lombok.RequiredArgsConstructor;
 
 @RestController
@@ -28,19 +31,20 @@ public class DuckCompatibilityController {
 
     @GetMapping("/active-conversation")
     public DuckActiveConversationResponse activeConversation(
-            @RequestParam String deviceId,
-            @RequestParam(required = false) String userId
+            @AuthenticationPrincipal DeviceUser link,
+            @RequestParam String deviceId
     ) {
-        return chatService.findActiveConversationId(deviceId, userId)
+        link.requireSerial(deviceId);
+        return chatService.findActiveConversationId(link)
                 .map(DuckActiveConversationResponse::new)
                 .orElseGet(() -> new DuckActiveConversationResponse(null));
     }
 
     @PostMapping("/conversation")
-    public DuckConversationResponse conversation(@RequestBody DuckConversationRequest request) {
+    public DuckConversationResponse conversation(@AuthenticationPrincipal DeviceUser link, @RequestBody DuckConversationRequest request) {
+        link.requireSerial(request.deviceId());
         ChatTurnResponse turn = chatService.sendDeviceMessage(
-                request.userId(),
-                request.deviceId(),
+                link,
                 request.conversationId(),
                 request.message(),
                 request.inputType(),
@@ -56,11 +60,11 @@ public class DuckCompatibilityController {
     }
 
     @PostMapping("/conversation/logs")
-    public DuckConversationLogResponse logs(@RequestBody DuckConversationLogRequest request) {
+    public DuckConversationLogResponse logs(@AuthenticationPrincipal DeviceUser link, @RequestBody DuckConversationLogRequest request) {
+        link.requireSerial(request.deviceId());
         iotService.saveDuckLog(
                 request.conversationId(),
-                request.deviceId(),
-                request.userId(),
+                link,
                 request.userMessage(),
                 request.assistantMessage(),
                 request.sttSuccess(),

@@ -19,6 +19,9 @@ import com.rubberduck.domain.iot.dto.IotTtsCompleteRequest;
 import com.rubberduck.domain.iot.service.IotService;
 import com.rubberduck.global.response.ApiResponse;
 
+import com.rubberduck.domain.device.entity.DeviceUser;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+
 import lombok.RequiredArgsConstructor;
 
 @RestController
@@ -30,17 +33,18 @@ public class IotController {
     private final IotService iotService;
 
     @PostMapping("/state")
-    public ApiResponse<IotResultResponse> state(@RequestBody IotStateRequest request) {
-        iotService.saveState(request.deviceId(), request.currentState());
+    public ApiResponse<IotResultResponse> state(@AuthenticationPrincipal DeviceUser link, @RequestBody IotStateRequest request) {
+        link.requireSerial(request.deviceId());
+        iotService.saveState(link, request.currentState());
         return ApiResponse.ok(new IotResultResponse(true));
     }
 
     @PostMapping("/stt-result")
-    public ApiResponse<IotSttResultResponse> sttResult(@RequestBody IotSttResultRequest request) {
+    public ApiResponse<IotSttResultResponse> sttResult(@AuthenticationPrincipal DeviceUser link, @RequestBody IotSttResultRequest request) {
+        link.requireSerial(request.deviceId());
         return ApiResponse.ok(new IotSttResultResponse(
                 iotService.handleSttResult(
-                        request.deviceId(),
-                        request.userId(),
+                        link,
                         request.conversationId(),
                         request.sttText()
                 )
@@ -48,30 +52,35 @@ public class IotController {
     }
 
     @PostMapping("/tts-complete")
-    public ApiResponse<IotResultResponse> ttsComplete(@RequestBody IotTtsCompleteRequest request) {
-        iotService.saveTtsComplete(request.deviceId(), request.messageId());
+    public ApiResponse<IotResultResponse> ttsComplete(@AuthenticationPrincipal DeviceUser link, @RequestBody IotTtsCompleteRequest request) {
+        link.requireSerial(request.deviceId());
+        iotService.saveTtsComplete(link, request.messageId());
         return ApiResponse.ok(new IotResultResponse(true));
     }
 
     @PostMapping("/error")
-    public ApiResponse<IotResultResponse> error(@RequestBody IotErrorRequest request) {
-        iotService.saveError(request.deviceId(), request.errorCode(), request.errorMessage());
+    public ApiResponse<IotResultResponse> error(@AuthenticationPrincipal DeviceUser link, @RequestBody IotErrorRequest request) {
+        link.requireSerial(request.deviceId());
+        iotService.saveError(link, request.errorCode(), request.errorMessage());
         return ApiResponse.ok(new IotResultResponse(true));
     }
 
     @PostMapping("/commands/next")
-    public ApiResponse<IotNextCommandResponse> nextCommand(@RequestBody IotNextCommandRequest request) {
-        return ApiResponse.ok(deviceCommandService.claimNext(request.deviceId())
+    public ApiResponse<IotNextCommandResponse> nextCommand(@AuthenticationPrincipal DeviceUser link, @RequestBody IotNextCommandRequest request) {
+        link.requireSerial(request.deviceId());
+        return ApiResponse.ok(deviceCommandService.claimNext(link)
                 .map(IotNextCommandResponse::from)
                 .orElseGet(IotNextCommandResponse::none));
     }
 
     @PostMapping("/commands/{commandId}/complete")
     public ApiResponse<IotResultResponse> completeCommand(
+            @AuthenticationPrincipal DeviceUser link,
             @PathVariable Long commandId,
             @RequestBody IotCommandCompleteRequest request
     ) {
-        deviceCommandService.complete(commandId, request.deviceId(), request.success(), request.errorMessage());
+        link.requireSerial(request.deviceId());
+        deviceCommandService.complete(commandId, link, request.success(), request.errorMessage());
         return ApiResponse.ok(new IotResultResponse(true));
     }
 }

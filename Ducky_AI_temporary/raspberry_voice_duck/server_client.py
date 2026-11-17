@@ -13,7 +13,7 @@ from config import (
     LEARNING_TYPE,
     REQUEST_TIMEOUT_SECONDS,
     SERVER_BASE_URL,
-    USER_ID,
+    DEVICE_TOKEN,
 )
 from led_state import LedState
 
@@ -31,6 +31,10 @@ class ServerClientError(RuntimeError):
 
 def _url(path: str) -> str:
     return f"{SERVER_BASE_URL}{path}"
+
+
+def _device_headers() -> dict[str, str]:
+    return {"Authorization": f"Bearer device.{DEVICE_TOKEN}"}
 
 
 def set_connection_state_callback(callback: Callable[[bool, float], None] | None) -> None:
@@ -82,6 +86,7 @@ def _post_iot_event(path: str, payload: dict[str, Any], action: str) -> bool:
     try:
         response = requests.post(
             _url(path),
+            headers=_device_headers(),
             json=payload,
             timeout=IOT_EVENT_TIMEOUT_SECONDS,
         )
@@ -176,6 +181,7 @@ def fetch_next_command() -> dict[str, Any] | None:
     try:
         response = requests.post(
             _url("/api/iot/commands/next"),
+            headers=_device_headers(),
             json={"device_id": DEVICE_ID},
             timeout=max(IOT_EVENT_TIMEOUT_SECONDS, COMMAND_POLL_SECONDS),
         )
@@ -208,6 +214,7 @@ def complete_command(command_id: int, success: bool, error_message: str | None =
     try:
         response = requests.post(
             _url(f"/api/iot/commands/{command_id}/complete"),
+            headers=_device_headers(),
             json=payload,
             timeout=IOT_EVENT_TIMEOUT_SECONDS,
         )
@@ -229,7 +236,8 @@ def fetch_active_conversation_id() -> int | None:
     try:
         response = requests.get(
             _url("/api/duck/active-conversation"),
-            params={"deviceId": DEVICE_ID, "userId": USER_ID},
+            headers=_device_headers(),
+            params={"deviceId": DEVICE_ID},
             timeout=IOT_EVENT_TIMEOUT_SECONDS,
         )
         response.raise_for_status()
@@ -264,7 +272,6 @@ def send_message_to_server(user_text: str, conversation_id: int | None = None) -
     """
     payload = {
         "deviceId": DEVICE_ID,
-        "userId": USER_ID,
         "inputType": "voice",
         "message": user_text,
         "learningType": LEARNING_TYPE,
@@ -275,6 +282,7 @@ def send_message_to_server(user_text: str, conversation_id: int | None = None) -
     try:
         response = requests.post(
             _url("/api/duck/conversation"),
+            headers=_device_headers(),
             json=payload,
             timeout=REQUEST_TIMEOUT_SECONDS,
         )
@@ -310,7 +318,6 @@ def save_conversation_log(
     """
     payload: dict[str, Any] = {
         "deviceId": DEVICE_ID,
-        "userId": USER_ID,
         "userMessage": user_message,
         "assistantMessage": assistant_message,
         "sttSuccess": stt_success,
@@ -323,6 +330,7 @@ def save_conversation_log(
     try:
         response = requests.post(
             _url("/api/duck/conversation/logs"),
+            headers=_device_headers(),
             json=payload,
             timeout=REQUEST_TIMEOUT_SECONDS,
         )

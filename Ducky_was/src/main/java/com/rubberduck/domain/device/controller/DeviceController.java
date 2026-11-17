@@ -6,11 +6,10 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.rubberduck.domain.auth.service.AuthService;
 import com.rubberduck.domain.device.dto.DeviceCommandResponse;
 import com.rubberduck.domain.device.dto.DeviceLinkResponse;
 import com.rubberduck.domain.device.dto.DeviceResponse;
@@ -19,6 +18,7 @@ import com.rubberduck.domain.device.dto.RegisterDeviceRequest;
 import com.rubberduck.domain.device.dto.StartDeviceCommandRequest;
 import com.rubberduck.domain.device.service.DeviceCommandService;
 import com.rubberduck.domain.device.service.DeviceService;
+import com.rubberduck.domain.user.entity.User;
 import com.rubberduck.global.response.ApiResponse;
 
 import lombok.RequiredArgsConstructor;
@@ -28,38 +28,38 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class DeviceController {
 
-    private final AuthService authService;
     private final DeviceCommandService deviceCommandService;
     private final DeviceService deviceService;
 
     @PostMapping
-    public ApiResponse<DeviceResponse> register(@RequestBody RegisterDeviceRequest request) {
-        return ApiResponse.ok(DeviceResponse.from(deviceService.register(request.serialNumber(), request.firmwareVersion())));
+    public ApiResponse<DeviceResponse> register(@AuthenticationPrincipal User user, @RequestBody RegisterDeviceRequest request) {
+        return ApiResponse.ok(DeviceResponse.from(deviceService.registeredDevice(user, request.serialNumber())));
     }
 
     @PostMapping("/{deviceId}/link")
     public ApiResponse<DeviceLinkResponse> link(
+            @AuthenticationPrincipal User user,
             @PathVariable Long deviceId,
             @RequestBody LinkDeviceRequest request
     ) {
-        return ApiResponse.ok(deviceService.link(deviceId, request.userId(), request.role()));
+        return ApiResponse.ok(deviceService.link(user, deviceId, request.userId(), request.role()));
     }
 
     @GetMapping
     public ApiResponse<List<DeviceResponse>> list(
-            @RequestHeader(value = "Authorization", required = false) String authorization
+            @AuthenticationPrincipal User user
     ) {
-        return ApiResponse.ok(deviceService.listForUser(authService.requireUser(authorization)));
+        return ApiResponse.ok(deviceService.listForUser(user));
     }
 
     @PostMapping("/{deviceId}/commands/start-recording")
     public ApiResponse<DeviceCommandResponse> startRecordingCommand(
-            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @AuthenticationPrincipal User user,
             @PathVariable Long deviceId,
             @RequestBody StartDeviceCommandRequest request
     ) {
         return ApiResponse.ok(DeviceCommandResponse.from(deviceCommandService.startRecording(
-                authService.requireUser(authorization),
+                user,
                 deviceId,
                 request.conversationId()
         )));
@@ -67,10 +67,10 @@ public class DeviceController {
 
     @GetMapping("/{deviceId}/commands/latest")
     public ApiResponse<DeviceCommandResponse> latestCommand(
-            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @AuthenticationPrincipal User user,
             @PathVariable Long deviceId
     ) {
-        return ApiResponse.ok(deviceCommandService.latestForUser(authService.requireUser(authorization), deviceId)
+        return ApiResponse.ok(deviceCommandService.latestForUser(user, deviceId)
                 .map(DeviceCommandResponse::from)
                 .orElse(null));
     }

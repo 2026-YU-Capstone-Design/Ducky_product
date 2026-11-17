@@ -1,4 +1,4 @@
-const CACHE_VERSION = "ducky-pwa-v2";
+const CACHE_VERSION = "ducky-pwa-v3";
 const OFFLINE_URL = "/offline";
 const CORE_ASSETS = [
   OFFLINE_URL,
@@ -42,7 +42,10 @@ self.addEventListener("fetch", (event) => {
 
   if (
     requestUrl.origin !== self.location.origin ||
-    requestUrl.pathname === "/sw.js"
+    requestUrl.pathname === "/sw.js" ||
+    requestUrl.pathname === "/api" ||
+    requestUrl.pathname.startsWith("/api/") ||
+    request.headers.has("Authorization")
   ) {
     return;
   }

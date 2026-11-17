@@ -6,7 +6,6 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getMe } from "@/lib/api/auth";
 import { clearAccessToken, getAccessToken } from "@/lib/api/client";
-import { ensureDefaultRaspberryLinked } from "@/lib/api/devices";
 import { clearPersistedUser, persistUser } from "@/lib/auth/storage";
 import { BottomNav } from "./BottomNav";
 import { Sidebar } from "./Sidebar";
@@ -68,9 +67,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         }
 
         persistUser(user);
-        void ensureDefaultRaspberryLinked(user.id).catch((deviceLinkError) => {
-          console.warn("Default Raspberry link failed", deviceLinkError);
-        });
 
         if (!user.onboarded) {
           router.replace("/onboarding");

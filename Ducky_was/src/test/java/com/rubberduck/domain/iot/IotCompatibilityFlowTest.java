@@ -7,39 +7,27 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.util.Map;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.BeforeEach;
+import com.rubberduck.support.ApiFlowTest;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.setup.MockMvcBuilders;
-import org.springframework.web.context.WebApplicationContext;
 
 @SpringBootTest
 @ActiveProfiles("test")
-class IotCompatibilityFlowTest {
-
-    @Autowired
-    private WebApplicationContext context;
+class IotCompatibilityFlowTest extends ApiFlowTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
-
-    private MockMvc mockMvc;
-
-    @BeforeEach
-    void setUp() {
-        mockMvc = MockMvcBuilders.webAppContextSetup(context).build();
-    }
 
     @Test
     void duckConversationRequiresConfiguredAiResponseService() throws Exception {
         String suffix = String.valueOf(System.nanoTime());
         String deviceId = "raspberry-duck-" + suffix;
         String userId = "iot-user-" + suffix;
+        TestDevice pi = provision(deviceId, newUser("iot"));
 
         mockMvc.perform(post("/api/duck/conversation")
+                        .header("Authorization", pi.authorization())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
                                 "deviceId", deviceId,
@@ -61,8 +49,10 @@ class IotCompatibilityFlowTest {
         String suffix = String.valueOf(System.nanoTime());
         String deviceId = "raspberry-duck-iot-" + suffix;
         String userId = "iot-state-user-" + suffix;
+        TestDevice pi = provision(deviceId, newUser("iot"));
 
         mockMvc.perform(post("/api/iot/state")
+                        .header("Authorization", pi.authorization())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
                                 "device_id", deviceId,
@@ -73,6 +63,7 @@ class IotCompatibilityFlowTest {
                 .andExpect(jsonPath("$.data.result").value(true));
 
         mockMvc.perform(post("/api/iot/stt-result")
+                        .header("Authorization", pi.authorization())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
                                 "device_id", deviceId,
@@ -83,15 +74,16 @@ class IotCompatibilityFlowTest {
                 .andExpect(jsonPath("$.success").value(false));
 
         mockMvc.perform(post("/api/iot/tts-complete")
+                        .header("Authorization", pi.authorization())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
-                                "device_id", deviceId,
-                                "message_id", 1
+                                "device_id", deviceId
                         ))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.result").value(true));
 
         mockMvc.perform(post("/api/iot/error")
+                        .header("Authorization", pi.authorization())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
                                 "device_id", deviceId,

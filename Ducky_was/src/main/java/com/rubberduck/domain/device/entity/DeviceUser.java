@@ -3,6 +3,8 @@ package com.rubberduck.domain.device.entity;
 import java.time.Instant;
 
 import com.rubberduck.domain.user.entity.User;
+import com.rubberduck.global.exception.CustomException;
+import com.rubberduck.global.exception.ErrorCode;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -45,8 +47,17 @@ public class DeviceUser {
     @Column(nullable = false, length = 40)
     private String role = "OWNER";
 
+    @Column(name = "token_hash", unique = true, length = 64)
+    private String tokenHash;
+
     @Column(name = "linked_at", nullable = false, updatable = false)
     private Instant linkedAt;
+
+    public void requireSerial(String serial) {
+        if (!device.getSerialNumber().equals(serial)) {
+            throw new CustomException(ErrorCode.FORBIDDEN);
+        }
+    }
 
     public static DeviceUser link(Device device, User user, String role) {
         DeviceUser deviceUser = new DeviceUser();

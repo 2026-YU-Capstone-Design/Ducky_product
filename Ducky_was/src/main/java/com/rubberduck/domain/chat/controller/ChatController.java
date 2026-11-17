@@ -8,11 +8,10 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.rubberduck.domain.auth.service.AuthService;
 import com.rubberduck.domain.chat.dto.ChatTurnResponse;
 import com.rubberduck.domain.chat.dto.ConversationDetailResponse;
 import com.rubberduck.domain.chat.dto.ConversationSummaryResponse;
@@ -32,15 +31,13 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class ChatController {
 
-    private final AuthService authService;
     private final ChatService chatService;
 
     @PostMapping("/conversations")
     public ApiResponse<ConversationSummaryResponse> startConversation(
-            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @AuthenticationPrincipal User user,
             @RequestBody StartConversationRequest request
     ) {
-        User user = authService.requireUser(authorization);
         return ApiResponse.ok(chatService.startConversation(
                 user,
                 request.deviceId(),
@@ -52,25 +49,24 @@ public class ChatController {
 
     @GetMapping("/conversations")
     public ApiResponse<List<ConversationSummaryResponse>> listConversations(
-            @RequestHeader(value = "Authorization", required = false) String authorization
+            @AuthenticationPrincipal User user
     ) {
-        return ApiResponse.ok(chatService.listConversations(authService.requireUser(authorization)));
+        return ApiResponse.ok(chatService.listConversations(user));
     }
 
     @GetMapping("/conversations/{conversationId}")
     public ApiResponse<ConversationDetailResponse> getConversation(
-            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @AuthenticationPrincipal User user,
             @PathVariable Long conversationId
     ) {
-        return ApiResponse.ok(chatService.getConversation(authService.requireUser(authorization), conversationId));
+        return ApiResponse.ok(chatService.getConversation(user, conversationId));
     }
 
     @PostMapping("/messages")
     public ApiResponse<ChatTurnResponse> sendMessage(
-            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @AuthenticationPrincipal User user,
             @RequestBody SendMessageRequest request
     ) {
-        User user = authService.requireUser(authorization);
         return ApiResponse.ok(chatService.sendMessage(
                 user,
                 request.conversationId(),
@@ -81,26 +77,26 @@ public class ChatController {
 
     @PostMapping("/hints")
     public ApiResponse<HintResponse> requestHint(
-            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @AuthenticationPrincipal User user,
             @RequestBody HintRequest request
     ) {
-        return ApiResponse.ok(chatService.requestHint(authService.requireUser(authorization), request.conversationId()));
+        return ApiResponse.ok(chatService.requestHint(user, request.conversationId()));
     }
 
     @PatchMapping("/conversations/{conversationId}/end")
     public ApiResponse<EndConversationResponse> endConversation(
-            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @AuthenticationPrincipal User user,
             @PathVariable Long conversationId
     ) {
-        return ApiResponse.ok(chatService.endConversation(authService.requireUser(authorization), conversationId));
+        return ApiResponse.ok(chatService.endConversation(user, conversationId));
     }
 
     @DeleteMapping("/conversations/{conversationId}")
     public ApiResponse<Void> deleteConversation(
-            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @AuthenticationPrincipal User user,
             @PathVariable Long conversationId
     ) {
-        chatService.deleteConversation(authService.requireUser(authorization), conversationId);
+        chatService.deleteConversation(user, conversationId);
         return ApiResponse.ok();
     }
 }
