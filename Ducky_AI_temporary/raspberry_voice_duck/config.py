@@ -55,7 +55,7 @@ OPENAI_TTS_VOICE = _get_str("OPENAI_TTS_VOICE", "marin")
 LANGUAGE = _get_str("LANGUAGE", "ko")
 SERVER_BASE_URL = _get_str("SERVER_BASE_URL", "http://localhost:8080").rstrip("/")
 DEVICE_ID = _get_str("DEVICE_ID", "raspberry-duck-001")
-USER_ID = _get_str("USER_ID", "test-user")
+DEVICE_TOKEN = _get_str("DEVICE_TOKEN")
 
 RECORD_SECONDS = _get_int("RECORD_SECONDS", 7)
 REQUEST_TIMEOUT_SECONDS = _get_float("REQUEST_TIMEOUT_SECONDS", 30.0)
@@ -105,6 +105,8 @@ def ensure_runtime_dirs() -> None:
 
 
 def validate_required_environment() -> None:
+    if not DEVICE_TOKEN:
+        raise RuntimeError("라즈베리파이 .env에 DEVICE_TOKEN을 설정하세요.")
     if not OPENAI_API_KEY:
         raise RuntimeError(
             "OPENAI_API_KEY가 설정되어 있지 않습니다. "

@@ -124,14 +124,6 @@ public class AuthService {
                 ));
     }
 
-    @Transactional(readOnly = true)
-    public User requireUser(String authorizationHeader) {
-        Long userId = authTokenService.parseUserId(authorizationHeader)
-                .orElseThrow(() -> new CustomException(ErrorCode.UNAUTHORIZED));
-        return userRepository.findById(userId)
-                .orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
-    }
-
     private AuthResponse toAuthResponse(User user) {
         return new AuthResponse(authTokenService.issue(user.getId()), UserResponse.from(user));
     }

@@ -52,7 +52,8 @@ Required values:
 
 ```env
 OPENAI_API_KEY=your-openai-api-key
-SERVER_BASE_URL=http://server-address:8080
+SERVER_BASE_URL=https://ducklab.site
+DEVICE_ID=raspberry-duck-001
 ```
 
 Optional OpenAI defaults:
@@ -83,6 +84,7 @@ GET /api/health
 
 ```http
 POST /api/duck/conversation
+Authorization: Bearer device.<DEVICE_TOKEN>
 Content-Type: application/json
 ```
 
@@ -91,7 +93,6 @@ Request:
 ```json
 {
   "deviceId": "raspberry-duck-001",
-  "userId": "user-id",
   "inputType": "voice",
   "message": "파이썬 반복문에서 인덱스 오류가 나는데 왜 그런지 모르겠어",
   "learningType": {
@@ -120,6 +121,7 @@ The `message` field must be a non-empty string. Invalid server responses are tre
 
 ```http
 POST /api/duck/conversation/logs
+Authorization: Bearer device.<DEVICE_TOKEN>
 Content-Type: application/json
 ```
 
@@ -129,7 +131,6 @@ Request:
 {
   "conversationId": 15,
   "deviceId": "raspberry-duck-001",
-  "userId": "user-id",
   "userMessage": "파이썬 반복문에서 인덱스 오류가 나는데 왜 그런지 모르겠어",
   "assistantMessage": "좋아요. 먼저 인덱스 오류가 발생한 반복문의 범위를 확인해볼까요?",
   "sttSuccess": true,
@@ -138,3 +139,5 @@ Request:
 ```
 
 If the server does not return a usable conversation response, the client does not save a conversation log for that turn.
+
+운영 서버에 연결할 때는 [기기 등록 절차](../../Ducky_was/README.md#라즈베리파이-기기-등록)에 따라 이 기기의 DEVICE_TOKEN을 설정하세요.

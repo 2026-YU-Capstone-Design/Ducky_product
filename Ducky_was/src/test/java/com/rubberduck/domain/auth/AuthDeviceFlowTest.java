@@ -6,7 +6,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.Locale;
 import java.util.Map;
@@ -15,30 +14,17 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rubberduck.domain.auth.service.KakaoOAuthClient;
 import com.rubberduck.domain.auth.service.NaverOAuthClient;
-import com.rubberduck.domain.device.entity.Device;
-import com.rubberduck.domain.device.service.DeviceService;
-import com.rubberduck.domain.user.entity.User;
-import org.junit.jupiter.api.BeforeEach;
+import com.rubberduck.support.ApiFlowTest;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
-import org.springframework.test.web.servlet.setup.MockMvcBuilders;
-import org.springframework.web.context.WebApplicationContext;
 
 @SpringBootTest
 @ActiveProfiles("test")
-class AuthDeviceFlowTest {
-
-    @Autowired
-    private WebApplicationContext context;
-
-    @Autowired
-    private DeviceService deviceService;
+class AuthDeviceFlowTest extends ApiFlowTest {
 
     @MockitoBean
     private KakaoOAuthClient kakaoOAuthClient;
@@ -47,13 +33,6 @@ class AuthDeviceFlowTest {
     private NaverOAuthClient naverOAuthClient;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
-
-    private MockMvc mockMvc;
-
-    @BeforeEach
-    void setUp() {
-        mockMvc = MockMvcBuilders.webAppContextSetup(context).build();
-    }
 
     @Test
     void signupLoginMeAndDeviceLinkFlow() throws Exception {
@@ -123,7 +102,9 @@ class AuthDeviceFlowTest {
                 .andExpect(jsonPath("$.data.learningStyle.understanding").value("global"))
                 .andExpect(jsonPath("$.data.onboarded").value(true));
 
+        TestDevice pi = provision("raspberry-duck-" + suffix, users.findById(Long.valueOf(userId)).orElseThrow());
         MvcResult deviceResult = mockMvc.perform(post("/api/devices")
+                        .header("Authorization", "Bearer " + accessToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
                                 "serial_number", "raspberry-duck-" + suffix,
@@ -137,6 +118,7 @@ class AuthDeviceFlowTest {
         String deviceId = readData(deviceResult).get("id").asText();
 
         mockMvc.perform(post("/api/devices/" + deviceId + "/link")
+                        .header("Authorization", "Bearer " + accessToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
                                 "user_id", userId,
@@ -203,6 +185,7 @@ class AuthDeviceFlowTest {
                 .andExpect(jsonPath("$.data.status").value("PENDING"));
 
         mockMvc.perform(post("/api/iot/commands/next")
+                        .header("Authorization", pi.authorization())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
                                 "device_id", "raspberry-duck-" + suffix
@@ -214,6 +197,7 @@ class AuthDeviceFlowTest {
                 .andExpect(jsonPath("$.data.conversationId").value(conversationId));
 
         mockMvc.perform(post("/api/iot/commands/next")
+                        .header("Authorization", pi.authorization())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
                                 "device_id", "raspberry-duck-" + suffix
@@ -222,6 +206,7 @@ class AuthDeviceFlowTest {
                 .andExpect(jsonPath("$.data.available").value(false));
 
         mockMvc.perform(post("/api/iot/commands/" + commandId + "/complete")
+                        .header("Authorization", pi.authorization())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
                                 "device_id", "raspberry-duck-" + suffix,
@@ -237,41 +222,6 @@ class AuthDeviceFlowTest {
     }
 
     @Test
-    void linkedDeviceResolvesMostRecentOwnerForIotConversationRouting() throws Exception {
-        String suffix = String.valueOf(System.nanoTime());
-        JsonNode firstSignup = signupUser(
-                "first-" + suffix + "@example.com",
-                "first" + suffix,
-                "Ducky123!"
-        );
-        JsonNode secondSignup = signupUser(
-                "second-" + suffix + "@example.com",
-                "second" + suffix,
-                "Ducky123!"
-        );
-
-        String firstUserId = firstSignup.get("userInfo").get("id").asText();
-        String secondUserId = secondSignup.get("userInfo").get("id").asText();
-
-        MvcResult deviceResult = mockMvc.perform(post("/api/devices")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of(
-                                "serial_number", "raspberry-duck-shared-" + suffix,
-                                "firmware_version", "0.1.0"
-                        ))))
-                .andExpect(status().isOk())
-                .andReturn();
-
-        String deviceId = readData(deviceResult).get("id").asText();
-        linkDevice(deviceId, firstUserId);
-        linkDevice(deviceId, secondUserId);
-
-        Device device = deviceService.getById(Long.parseLong(deviceId));
-        assertThat(deviceService.findLinkedUser(device).map(User::getId))
-                .contains(Long.parseLong(secondUserId));
-    }
-
-    @Test
     void activeConversationEndpointReturnsLinkedUserInProgressSession() throws Exception {
         String suffix = String.valueOf(System.nanoTime());
         String email = "active-conversation-" + suffix + "@example.com";
@@ -281,8 +231,10 @@ class AuthDeviceFlowTest {
         JsonNode signupData = signupUser(email, loginId, password);
         String userId = signupData.get("userInfo").get("id").asText();
         String accessToken = signupData.get("accessToken").asText();
+        TestDevice pi = provision("raspberry-duck-active-" + suffix, users.findById(Long.valueOf(userId)).orElseThrow());
 
         MvcResult deviceResult = mockMvc.perform(post("/api/devices")
+                        .header("Authorization", "Bearer " + accessToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
                                 "serial_number", "raspberry-duck-active-" + suffix,
@@ -292,7 +244,7 @@ class AuthDeviceFlowTest {
                 .andReturn();
         String deviceId = readData(deviceResult).get("id").asText();
         String deviceSerial = readData(deviceResult).get("serialNumber").asText();
-        linkDevice(deviceId, userId);
+        linkDevice(deviceId, userId, accessToken);
 
         MvcResult conversationResult = mockMvc.perform(post("/api/chat/conversations")
                         .header("Authorization", "Bearer " + accessToken)
@@ -306,6 +258,7 @@ class AuthDeviceFlowTest {
         Long conversationId = readData(conversationResult).get("id").asLong();
 
         mockMvc.perform(get("/api/duck/active-conversation")
+                        .header("Authorization", pi.authorization())
                         .param("deviceId", deviceSerial)
                         .param("userId", userId))
                 .andExpect(status().isOk())
@@ -487,8 +440,9 @@ class AuthDeviceFlowTest {
         return readData(signupResult);
     }
 
-    private void linkDevice(String deviceId, String userId) throws Exception {
+    private void linkDevice(String deviceId, String userId, String accessToken) throws Exception {
         mockMvc.perform(post("/api/devices/" + deviceId + "/link")
+                        .header("Authorization", "Bearer " + accessToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
                                 "user_id", userId,

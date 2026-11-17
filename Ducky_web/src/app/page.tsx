@@ -6,7 +6,6 @@ import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { Comfortaa } from "next/font/google";
 import { checkEmailAvailability, login, signup } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/client";
-import { ensureDefaultRaspberryLinked } from "@/lib/api/devices";
 import {
   buildKakaoAuthorizeUrl,
   createOAuthState,
@@ -163,12 +162,6 @@ export default function LandingPage() {
 
   const finishAuthentication = async (user: User) => {
     setUser(user);
-
-    try {
-      await ensureDefaultRaspberryLinked(user.id);
-    } catch (deviceLinkError) {
-      console.warn("Default Raspberry link failed", deviceLinkError);
-    }
 
     router.push(user.onboarded ? "/dashboard" : "/onboarding");
   };

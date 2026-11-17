@@ -143,7 +143,7 @@ export function ChatPage() {
 
         const raspberry = devices.find(
           (device) => device.serialNumber === DEFAULT_RASPBERRY_SERIAL,
-        );
+        ) ?? devices[0];
         setRaspberryDeviceId(raspberry?.id ?? null);
         setRaspberryDeviceStatus(raspberry?.status ?? null);
 

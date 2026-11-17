@@ -27,6 +27,8 @@ from led_state import LedState  # noqa: E402
 class ServerClientTelemetryTest(unittest.TestCase):
     def setUp(self) -> None:
         server_client._iot_backoff_until = 0.0
+        self.addCleanup(patch.stopall)
+        patch.object(server_client, "DEVICE_TOKEN", "test-token").start()
 
     def test_report_iot_state_posts_state_payload(self) -> None:
         response = Mock()
@@ -42,6 +44,7 @@ class ServerClientTelemetryTest(unittest.TestCase):
                 "device_id": "raspberry-duck-001",
                 "current_state": "RECORDING",
             },
+            headers={"Authorization": "Bearer device.test-token"},
             timeout=2.0,
         )
 
@@ -60,6 +63,7 @@ class ServerClientTelemetryTest(unittest.TestCase):
                 "errorCode": "STT_FAILED",
                 "errorMessage": "failed",
             },
+            headers={"Authorization": "Bearer device.test-token"},
             timeout=2.0,
         )
 
@@ -91,6 +95,7 @@ class ServerClientTelemetryTest(unittest.TestCase):
         post.assert_called_once_with(
             "http://localhost:8080/api/iot/commands/next",
             json={"device_id": "raspberry-duck-001"},
+            headers={"Authorization": "Bearer device.test-token"},
             timeout=2.0,
         )
 
@@ -124,6 +129,7 @@ class ServerClientTelemetryTest(unittest.TestCase):
                 "device_id": "raspberry-duck-001",
                 "success": True,
             },
+            headers={"Authorization": "Bearer device.test-token"},
             timeout=2.0,
         )
 
@@ -138,7 +144,8 @@ class ServerClientTelemetryTest(unittest.TestCase):
         self.assertEqual(12, conversation_id)
         get.assert_called_once_with(
             "http://localhost:8080/api/duck/active-conversation",
-            params={"deviceId": "raspberry-duck-001", "userId": "test-user"},
+            params={"deviceId": "raspberry-duck-001"},
+            headers={"Authorization": "Bearer device.test-token"},
             timeout=2.0,
         )
 
@@ -167,7 +174,6 @@ class ServerClientTelemetryTest(unittest.TestCase):
             "http://localhost:8080/api/duck/conversation",
             json={
                 "deviceId": "raspberry-duck-001",
-                "userId": "test-user",
                 "inputType": "voice",
                 "message": "hello",
                 "learningType": {
@@ -177,6 +183,7 @@ class ServerClientTelemetryTest(unittest.TestCase):
                 },
                 "conversationId": 12,
             },
+            headers={"Authorization": "Bearer device.test-token"},
             timeout=30.0,
         )
 

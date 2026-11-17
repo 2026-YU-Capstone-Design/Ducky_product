@@ -19,12 +19,10 @@ import com.rubberduck.domain.chat.repository.ChatMessageRepository;
 import com.rubberduck.domain.chat.repository.ConversationRepository;
 import com.rubberduck.domain.chat.service.ChatResponseService.AiReply;
 import com.rubberduck.domain.device.entity.Device;
-import com.rubberduck.domain.device.entity.DeviceCommand;
-import com.rubberduck.domain.device.repository.DeviceCommandRepository;
+import com.rubberduck.domain.device.entity.DeviceUser;
 import com.rubberduck.domain.device.service.DeviceService;
 import com.rubberduck.domain.document.service.DocumentService;
 import com.rubberduck.domain.user.entity.User;
-import com.rubberduck.domain.user.service.UserService;
 import com.rubberduck.global.exception.CustomException;
 import com.rubberduck.global.exception.ErrorCode;
 
@@ -36,9 +34,7 @@ public class ChatService {
 
     private final ConversationRepository conversationRepository;
     private final ChatMessageRepository chatMessageRepository;
-    private final DeviceCommandRepository deviceCommandRepository;
     private final DeviceService deviceService;
-    private final UserService userService;
     private final ChatResponseService chatResponseService;
     private final DocumentService documentService;
 
@@ -50,7 +46,7 @@ public class ChatService {
             String title,
             String topic
     ) {
-        Device device = deviceId == null ? null : deviceService.getById(deviceId);
+        Device device = deviceId == null ? null : deviceService.requireLinkedDevice(user, deviceId);
         Conversation conversation = Conversation.start(user, device, personaId, title, topic);
         return ConversationSummaryResponse.from(conversationRepository.save(conversation));
     }
@@ -78,43 +74,56 @@ public class ChatService {
 
     @Transactional
     public ChatTurnResponse sendDeviceMessage(
-            String externalUserId,
-            String deviceSerial,
+            DeviceUser link,
             Long conversationId,
             String messageText,
             String inputType,
             Map<String, String> learningType
     ) {
-        Device device = deviceService.findOrCreateBySerial(deviceSerial);
+        Device device = link.getDevice();
+        User user = link.getUser();
+        Long targetId = conversationId != null ? conversationId : findActiveConversationId(link).orElse(null);
         Conversation conversation;
-        User user;
-
-        if (conversationId != null) {
-            conversation = getConversationEntity(conversationId);
-            user = conversation.getUser();
+        if (targetId == null) {
+            conversation = conversationRepository.save(
+                    Conversation.start(user, device, null, "Raspberry voice session", "음성 러버덕 질문 연결"));
         } else {
-            user = deviceService.findLinkedUser(device)
-                    .orElseGet(() -> userService.findOrCreateExternalUser(externalUserId));
-            conversation = resolveOrCreateDeviceConversation(device, user);
-        }
-
-        if (conversation.getDevice() == null) {
+            conversation = lockAssignableConversation(user, device, targetId);
             conversation.setDevice(device);
         }
 
         return appendUserTurn(user, conversation, messageText, inputType == null ? "voice" : inputType, learningType);
     }
 
+    @Transactional
+    public Conversation lockAssignableConversation(User user, Device device, Long conversationId) {
+        Conversation conversation = conversationRepository.findLockedById(conversationId)
+                .orElseThrow(() -> new CustomException(ErrorCode.SESSION_NOT_FOUND));
+        ensureOwner(conversation, user);
+        if (conversation.getDevice() != null && !conversation.getDevice().getId().equals(device.getId())) {
+            throw new CustomException(ErrorCode.FORBIDDEN);
+        }
+        return conversation;
+    }
+
     @Transactional(readOnly = true)
-    public Optional<Long> findActiveConversationId(String deviceSerial, String externalUserId) {
-        Device device = deviceService.findOrCreateBySerial(deviceSerial);
-        User user = deviceService.findLinkedUser(device)
-                .orElseGet(() -> userService.findOrCreateExternalUser(externalUserId));
-        return findActiveDeviceConversation(device, user).map(Conversation::getId);
+    public Optional<Long> findActiveConversationId(DeviceUser link) {
+        User user = link.getUser();
+        return conversationRepository.findFirstByUserAndDeviceAndStatusOrderByUpdatedAtDesc(user, link.getDevice(), "in_progress")
+                .or(() -> conversationRepository.findFirstByUserAndDeviceAndStatusOrderByUpdatedAtDesc(user, null, "in_progress"))
+                .map(ConversationRepository.ConversationId::getId);
+    }
+
+    public void requireDeviceConversation(DeviceUser link, Conversation conversation) {
+        ensureOwner(conversation, link.getUser());
+        if (conversation.getDevice() == null || !conversation.getDevice().getId().equals(link.getDevice().getId())) {
+            throw new CustomException(ErrorCode.FORBIDDEN);
+        }
     }
 
     @Transactional
     public void recordConversationLog(
+            DeviceUser link,
             Long conversationId,
             String userMessageText,
             String assistantMessageText,
@@ -125,6 +134,7 @@ public class ChatService {
             return;
         }
         Conversation conversation = getConversationEntity(conversationId);
+        requireDeviceConversation(link, conversation);
         List<ChatMessage> latestUserMessages =
                 chatMessageRepository.findByConversationAndSenderOrderBySequenceNoDesc(conversation, "user");
         if (!latestUserMessages.isEmpty()) {
@@ -268,38 +278,6 @@ public class ChatService {
         conversationRepository.delete(conversation);
     }
 
-    private Conversation resolveOrCreateDeviceConversation(Device device, User user) {
-        return findActiveDeviceConversation(device, user)
-                .orElseGet(() -> conversationRepository.save(
-                        Conversation.start(user, device, null, "Raspberry voice session", "음성 러버덕 질문 연결")
-                ));
-    }
-
-    private Optional<Conversation> findActiveDeviceConversation(Device device, User user) {
-        Optional<Conversation> byDevice = conversationRepository
-                .findFirstByDeviceAndStatusOrderByUpdatedAtDesc(device, "in_progress")
-                .filter(conversation -> belongsToUser(conversation, user));
-        if (byDevice.isPresent()) {
-            return byDevice;
-        }
-
-        Optional<Conversation> byUser = conversationRepository
-                .findFirstByUserAndStatusOrderByUpdatedAtDesc(user, "in_progress");
-        if (byUser.isPresent()) {
-            return byUser;
-        }
-
-        return deviceCommandRepository.findFirstByDeviceOrderByCreatedAtDesc(device)
-                .map(DeviceCommand::getConversationId)
-                .flatMap(conversationRepository::findById)
-                .filter(conversation -> "in_progress".equals(conversation.getStatus()))
-                .filter(conversation -> belongsToUser(conversation, user));
-    }
-
-    private boolean belongsToUser(Conversation conversation, User user) {
-        return conversation.getUser().getId().equals(user.getId());
-    }
-
     private Conversation getConversationEntity(Long conversationId) {
         if (conversationId == null) {
             throw new CustomException(ErrorCode.INVALID_REQUEST);
@@ -310,7 +288,7 @@ public class ChatService {
 
     private void ensureOwner(Conversation conversation, User user) {
         if (!conversation.getUser().getId().equals(user.getId())) {
-            throw new CustomException(ErrorCode.UNAUTHORIZED);
+            throw new CustomException(ErrorCode.FORBIDDEN);
         }
     }
 
