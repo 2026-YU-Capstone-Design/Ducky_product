@@ -1,0 +1,64 @@
+
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.7-pg17
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: rubberduck
+      POSTGRES_USER: ${DB_USERNAME:-rubberduck}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD required}
+
+    command:
+      - postgres
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - max_connections=25
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+    mem_limit: 512m
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    image: ${BACKEND_IMAGE:-ghcr.io/2026-yu-capstone-design/ducky-backend:main}
+    restart: unless-stopped
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    ports:
+      - "8080:8080"
+
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_URL: jdbc:postgresql://postgres:5432/rubberduck
+      DB_USERNAME: ${DB_USERNAME:-rubberduck}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD required}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?OPENAI_API_KEY required}
+      OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-gpt-4.1-mini}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?CORS_ALLOWED_ORIGINS required}
+      JPA_DDL_AUTO: ${JPA_DDL_AUTO:-update}
+      SPRING_JPA_SHOW_SQL: "false"
+      JAVA_TOOL_OPTIONS: "-Xms256m -Xmx640m -XX:MaxMetaspaceSize=256m"
+
+    mem_limit: 1100m
+
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/api/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+volumes:
+  postgres_data:
