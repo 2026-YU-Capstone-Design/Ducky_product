@@ -1,0 +1,8 @@
+services:
+  frontend:
+    image: ${FRONTEND_IMAGE:?Set FRONTEND_IMAGE to the frontend image to deploy}
+    container_name: ducky-frontend
+    restart: unless-stopped
+    network_mode: bridge
+    ports:
+      - "127.0.0.1:3000:3000"
