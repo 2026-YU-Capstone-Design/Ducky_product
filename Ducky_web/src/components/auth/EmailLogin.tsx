@@ -47,71 +47,80 @@ export function EmailLogin({
   setSignupStep,
 }: EmailLoginProps) {
   return (
-    <div className="flex w-full flex-col items-start space-y-7 pt-0 animate-fade-in duration-300 sm:space-y-8 sm:pt-2">
+    <div className="animate-fade-in flex w-full flex-col items-start space-y-8 pt-0 duration-300 sm:space-y-10 sm:pt-2">
       <button
         type="button"
         onClick={() => {
           setEmailMode("options");
           setError("");
         }}
-        className="p-1 hover:bg-zinc-200/50 rounded-full transition-colors -ml-1.5 focus:outline-none"
+        className="-ml-1.5 cursor-pointer"
         aria-label="뒤로가기"
       >
         <ChevronLeft className="h-7 w-7 text-[#333333]" />
       </button>
-      <h2 className="pt-2 text-3xl font-bold tracking-tight text-[#333333] break-keep select-none sm:text-4xl">
+
+      <h2 className="break-keep select-none text-2xl font-extrabold leading-tight tracking-tight text-[#333333] sm:text-3xl">
         이메일로 로그인
       </h2>
-      <form onSubmit={handleEmailLoginSubmit} className="w-full space-y-4 pt-4">
-        {error && (
-          <div className="flex items-start gap-2 rounded-xl border border-red-100 bg-red-50 p-3.5 text-sm text-red-600">
-            <AlertCircle className="h-4 w-4 shrink-0" />
-            <span className="min-w-0 break-words">{error}</span>
-          </div>
-        )}
-        <Input
-          type="email"
-          placeholder="이메일 입력"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="h-auto min-h-13 w-full rounded-xl border-none bg-[#EFECE5] px-4 py-3 text-base font-medium text-[#333333] shadow-none transition-all placeholder-[#9E988E] focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
-          required
-        />
-        <Input
-          type="password"
-          placeholder="비밀번호 입력"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="h-auto min-h-13 w-full rounded-xl border-none bg-[#EFECE5] px-4 py-3 text-base font-medium text-[#333333] shadow-none transition-all placeholder-[#9E988E] focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
-          required
-        />
-        <div className="pt-2">
-          <Button
-            type="submit"
-            disabled={isLoading}
-            className="h-auto min-h-13 w-full whitespace-normal rounded-xl border-none bg-[#FECA43] px-4 py-3 text-base font-bold leading-tight text-white shadow-none transition-transform hover:bg-[#FECA43]/90 active:scale-[0.99]"
-          >
-            {isLoading ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : (
-              "로그인 하기"
+
+      <form onSubmit={handleEmailLoginSubmit} className="w-full">
+        <div className="space-y-4">
+          <div className="min-h-[58px]">
+            {error && (
+              <div className="flex items-start gap-2 rounded-xl border border-red-100 bg-red-50 p-3.5 text-sm text-red-600">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span className="min-w-0 break-words">{error}</span>
+              </div>
             )}
-          </Button>
+          </div>
+
+          <Input
+            type="email"
+            placeholder="이메일 입력"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="h-auto min-h-13 w-full rounded-xl border-none bg-[#EFECE5] px-4 py-3 text-base font-medium text-[#333333] shadow-none transition-all placeholder-[#9E988E] focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
+            required
+          />
+
+          <Input
+            type="password"
+            placeholder="비밀번호 입력"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="h-auto min-h-13 w-full rounded-xl border-none bg-[#EFECE5] px-4 py-3 text-base font-medium text-[#333333] shadow-none transition-all placeholder-[#9E988E] focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
+            required
+          />
+
+          <div className="pt-2">
+            <Button
+              type="submit"
+              disabled={isLoading}
+              className="h-auto min-h-13 w-full rounded-xl border-none bg-[#FECA43] px-4 py-3 text-base font-bold leading-tight text-white whitespace-normal shadow-none transition-all hover:bg-[#FECA43]/90 active:scale-[0.99] cursor-pointer"
+            >
+              {isLoading ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                "로그인"
+              )}
+            </Button>
+          </div>
+        </div>
+        <div className="flex w-full items-center justify-center text-sm text-zinc-500 pt-4">
+          <button
+            type="button"
+            onClick={() => {
+              setEmailMode("signup");
+              setSignupStep(1);
+              setError("");
+            }}
+            className="cursor-pointer border-b border-[#FECA43] font-semibold text-[#FECA43]"
+          >
+            회원가입
+          </button>
         </div>
       </form>
-      <div className="w-full flex justify-center items-center text-sm text-zinc-500 pt-4">
-        <button
-          type="button"
-          onClick={() => {
-            setEmailMode("signup");
-            setSignupStep(1);
-            setError("");
-          }}
-          className="hover:underline font-bold text-[#FECA43]"
-        >
-          회원가입하기
-        </button>
-      </div>
     </div>
   );
 }

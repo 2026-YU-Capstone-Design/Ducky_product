@@ -338,7 +338,7 @@ export default function LandingPage() {
 
   // 3단계: 메인 로그인 화면
   return (
-    <div className={`flex min-h-dvh w-full flex-col overflow-y-auto bg-[#FAF8F5] px-4 py-6 font-sans transition-all duration-500 sm:px-6 lg:px-10 ${
+    <div className={`flex min-h-dvh w-full flex-col overflow-y-auto bg-[#FFFCF3] px-4 py-6 font-sans transition-all duration-500 sm:px-6 lg:px-10 ${
       emailMode === "options"
         ? "items-center justify-center"
         : "items-center justify-start sm:justify-center"
