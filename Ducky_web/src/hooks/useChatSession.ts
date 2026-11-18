@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { uploadDocument, waitForDocument } from "@/lib/api/documents";
 import {
   endConversation,
   getConversation,
@@ -11,7 +12,7 @@ import {
   type BackendChatMessage,
   type BackendConversationSummary,
 } from "@/lib/api/chat";
-import { ApiError, getAccessToken } from "@/lib/api/client";
+import { getAccessToken } from "@/lib/api/client";
 import type {
   ChatAttachment,
   ChatMessage,
@@ -99,6 +100,8 @@ function toChatMessage(
     content: message.content,
     type: toChatMessageType(message.type),
     createdAt: message.createdAt,
+    sources: message.sources,
+    responseMode: message.responseMode,
     ...(hintLevel ? { hintLevel } : {}),
     ...(message.hintNumber ? { hintNumber: message.hintNumber } : {}),
     ...(attachments?.length ? { attachments } : {}),
@@ -147,7 +150,7 @@ function toProgressStatus(status: string): SessionProgressStatus {
 }
 
 function getErrorMessage(error: unknown) {
-  if (error instanceof ApiError && error.message) {
+  if (error instanceof Error && error.message) {
     return error.message;
   }
 
@@ -163,6 +166,7 @@ export function useChatSession({ enabled = true }: UseChatSessionOptions = {}) {
   const [status, setStatus] = useState<SessionProgressStatus>("learning");
   const [isLoadingSession, setIsLoadingSession] = useState(enabled);
   const [isThinking, setIsThinking] = useState(false);
+  const [processingMessage, setProcessingMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isReady, setIsReady] = useState(false);
 
@@ -237,6 +241,13 @@ export function useChatSession({ enabled = true }: UseChatSessionOptions = {}) {
       setError(null);
 
       try {
+        // Persist attachments and wait for indexing before asking about them.
+        for (const file of files ?? []) {
+          setProcessingMessage(`${file.name} 문서를 처리하고 있습니다.`);
+          if (file.size > 20 * 1024 * 1024) throw new Error("파일은 20MB 이하로 올려 주세요.");
+          await waitForDocument(await uploadDocument(file));
+        }
+        setProcessingMessage(null);
         const turn = await sendChatMessage({
           conversationId: activeSession.id,
           message:
@@ -266,6 +277,7 @@ export function useChatSession({ enabled = true }: UseChatSessionOptions = {}) {
       } catch (sendError) {
         setError(getErrorMessage(sendError));
       } finally {
+        setProcessingMessage(null);
         setIsThinking(false);
       }
     },
@@ -354,6 +366,7 @@ export function useChatSession({ enabled = true }: UseChatSessionOptions = {}) {
     isReady,
     isThinking,
     messages,
+    processingMessage,
     refreshMessages,
     requestHint,
     retry: loadSession,

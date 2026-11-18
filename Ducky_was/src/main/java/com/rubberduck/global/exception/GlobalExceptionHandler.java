@@ -8,6 +8,11 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiResponse<?>> handleUploadTooLarge(Exception e) {
+        return ResponseEntity.status(413).body(ApiResponse.fail("파일은 20MB 이하로 올려 주세요."));
+    }
+
     @ExceptionHandler(CustomException.class)
     public ResponseEntity<ApiResponse<?>> handleCustomException(CustomException e) {
         ErrorCode code = e.getErrorCode();

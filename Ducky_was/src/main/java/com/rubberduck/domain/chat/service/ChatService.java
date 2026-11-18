@@ -177,11 +177,11 @@ public class ChatService {
         }
         conversation.increaseMessageCount();
 
-        String documentContext = completion
-                ? ""
-                : documentService.toPromptContext(documentService.searchResults(user, normalizedText, 3));
+        var sources = completion ? java.util.List.<com.rubberduck.domain.document.dto.DocumentSearchResult>of()
+                : documentService.searchResults(user, normalizedText, 3);
+        String documentContext = documentService.toPromptContext(sources);
         AiReply aiReply = completion
-                ? new AiReply(chatResponseService.generateCompletionFeedback(user, conversation, conversationHistory), "feedback")
+                ? new AiReply(chatResponseService.generateCompletionFeedback(user, conversation, conversationHistory), "feedback", chatResponseService.responseMode())
                 : chatResponseService.generateTurn(normalizedText, user, documentContext, conversationHistory, learningType);
 
         ChatMessage aiMessage = ChatMessage.create(
@@ -192,6 +192,8 @@ public class ChatService {
                 "system",
                 userSequence + 1
         );
+        aiMessage.setSources(sources);
+        aiMessage.setResponseMode(aiReply.responseMode());
         conversation.increaseMessageCount();
 
         if (completion) {
@@ -229,6 +231,7 @@ public class ChatService {
                 conversation.getMessageCount() + 1
         );
         hintMessage.setHintNumber(hintNumber);
+        hintMessage.setResponseMode(chatResponseService.responseMode());
         hintMessage.setHintLevel(hintLevel);
 
         conversation.increaseHintCount();
@@ -258,6 +261,7 @@ public class ChatService {
                 "system",
                 conversation.getMessageCount() + 1
         );
+        feedbackMessage.setResponseMode(chatResponseService.responseMode());
         conversation.increaseMessageCount();
 
         chatMessageRepository.save(feedbackMessage);

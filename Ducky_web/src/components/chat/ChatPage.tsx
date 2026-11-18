@@ -62,6 +62,7 @@ export function ChatPage() {
     isReady,
     isThinking,
     messages,
+    processingMessage,
     refreshMessages,
     requestHint,
     retry,
@@ -331,9 +332,8 @@ export function ChatPage() {
                   오늘의 대화 목표
                 </p>
                 <p className="mt-1">
-                  Ducky는 정답·원인·개념을 강의하지 않습니다. 맥락을 이해한 뒤
-                  질문으로 끌고 가며, 스스로 깨달을 때까지 말하게 합니다.
-                  필요할 때만 힌트를 사용하세요.
+                  궁금한 내용을 질문하거나 학습 자료를 첨부하세요. 문서에 근거해
+                  답하고, 스스로 풀어 보고 싶을 때는 힌트를 요청할 수 있습니다.
                 </p>
               </div>
 
@@ -387,7 +387,9 @@ export function ChatPage() {
                   </div>
                   <div className="rounded-[14px] rounded-bl-[4px] border border-[#F0E0A8] bg-[#FFF6DC] px-[15px] py-[11px] transition-colors dark:border-[#5C4413]/40 dark:bg-[#2A2310]">
                     <span role="status" className="inline-flex gap-1">
-                      <span className="sr-only">Ducky가 다음 질문을 고르는 중</span>
+                      <span className={processingMessage ? "text-xs" : "sr-only"}>
+                        {processingMessage ?? "Ducky가 답변을 준비하고 있습니다"}
+                      </span>
                       <span className="size-1.5 animate-bounce rounded-full bg-[#C4A85A] [animation-delay:-0.3s]" />
                       <span className="size-1.5 animate-bounce rounded-full bg-[#C4A85A] [animation-delay:-0.15s]" />
                       <span className="size-1.5 animate-bounce rounded-full bg-[#C4A85A]" />

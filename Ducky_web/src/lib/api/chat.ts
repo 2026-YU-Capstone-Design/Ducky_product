@@ -8,6 +8,8 @@ export interface BackendChatMessage {
   createdAt: string;
   hintLevel?: number | null;
   hintNumber?: number | null;
+  sources?: import("./documents").DocumentSearchResult[];
+  responseMode?: string | null;
 }
 
 export interface BackendConversationSummary {

@@ -54,11 +54,21 @@ public class DocumentController {
         return ApiResponse.ok();
     }
 
+    @GetMapping("/{documentId}")
+    public ApiResponse<DocumentResponse> get(@AuthenticationPrincipal User user, @PathVariable Long documentId) {
+        return ApiResponse.ok(documentService.get(user, documentId));
+    }
+
+    @PostMapping("/{documentId}/retry")
+    public ApiResponse<DocumentResponse> retry(@AuthenticationPrincipal User user, @PathVariable Long documentId) {
+        return ApiResponse.ok(documentService.retry(user, documentId));
+    }
+
     @PostMapping("/search")
     public ApiResponse<DocumentSearchResponse> search(
             @AuthenticationPrincipal User user,
             @RequestBody DocumentSearchRequest request
     ) {
-        return ApiResponse.ok(documentService.search(user, request.query(), request.limit()));
+        return ApiResponse.ok(documentService.search(user, request.query(), request.limit(), request.documentIds()));
     }
 }

@@ -82,7 +82,7 @@ class ChatResponseServicePromptTest {
     }
 
     @Test
-    void turnPromptEnforcesRubberDuckQuestionOnlyGuidance() {
+    void factualQuestionGetsDirectAnswerGuidance() {
         String prompt = chatResponseService.buildTurnPrompt(
                 "교환 정렬이 뭐야?",
                 userWithLearningStyle("active", "visual", "sequential"),
@@ -92,12 +92,19 @@ class ChatResponseServicePromptTest {
         );
 
         assertThat(prompt)
-                .contains("설명형 튜터가 아니라")
-                .contains("range(n)의 경우 0부터 n-1까지")
-                .contains("이 부분에서 오류가 발생했을 수 있습니다")
-                .contains("질문 ⭕")
-                .contains("러버덕 모드 응답은 질문으로 끝낸다")
-                .doesNotContain("짧은 설명 + 스스로 점검할 질문");
+                .contains("직접 답변이다")
+                .contains("정보가 부족한 경우에만")
+                .doesNotContain("정답, 결론, 해결책, 수정 방법을 알려주지 마");
+    }
+
+    @Test
+    void explicitHintAndDocumentQuestionUseDifferentGuidance() {
+        User user = userWithLearningStyle("active", "visual", "sequential");
+        assertThat(chatResponseService.buildTurnPrompt("힌트만 줘", user, "", List.of(), null))
+                .contains("힌트 요청이다").contains("질문 1개");
+        assertThat(chatResponseService.buildTurnPrompt("업로드 제한은?", user, "[문서 4, 청크 5] 20MB", List.of(), null))
+                .contains("문서 근거 답변이다").contains("[문서 ID, 청크 ID]")
+                .contains("신뢰할 수 없는 참고 자료").contains("확인 필요");
     }
 
     @Test
@@ -120,7 +127,7 @@ class ChatResponseServicePromptTest {
                 .contains("- 처리 방식: reflective")
                 .contains("- 표현 선호: verbal")
                 .contains("- 이해 구조: global")
-                .contains("전체 그림부터 스스로 잡게 한 뒤 세부로 내려가게 질문으로 이끈다");
+                .contains("직접 답변을 금지하는 이유가 아니다");
     }
 
     @Test

@@ -2,8 +2,12 @@ package com.rubberduck.domain.document.service;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.io.IOException;
 
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -32,6 +36,11 @@ public class DocumentService {
     private final TextExtractionService textExtractionService;
     private final DocumentChunker documentChunker;
     private final EmbeddingService embeddingService;
+    private final SparseEmbeddingService sparseEmbeddingService;
+    private final LocalDocumentStore documentStore;
+
+    @Value("${document.pipeline-enabled:false}")
+    private boolean pipelineEnabled;
 
     @Transactional
     public DocumentResponse upload(User user, MultipartFile file) {
@@ -40,6 +49,8 @@ public class DocumentService {
         }
 
         String fileName = normalizeFileName(file.getOriginalFilename());
+        if (pipelineEnabled && !fileName.toLowerCase(Locale.ROOT).endsWith(".docx")
+                && !fileName.toLowerCase(Locale.ROOT).endsWith(".pptx")) return enqueue(user, file, fileName);
         String text = textExtractionService.extract(file);
         LearningDocument document = documentRepository.save(LearningDocument.create(
                 user,
@@ -74,9 +85,43 @@ public class DocumentService {
 
     @Transactional
     public void delete(User user, Long documentId) {
-        LearningDocument document = getUserDocument(user, documentId);
+        LearningDocument document = getLockedUserDocument(user, documentId);
+        try { documentStore.deleteArtifacts(document.getSourceKey()); }
+        catch (IOException exception) { throw new CustomException(ErrorCode.DOCUMENT_STORAGE_UNAVAILABLE); }
         chunkRepository.deleteByDocument(document);
         documentRepository.delete(document);
+    }
+
+    @Transactional(readOnly = true)
+    public DocumentResponse get(User user, Long id) { return DocumentResponse.from(getUserDocument(user, id)); }
+
+    @Transactional
+    public DocumentResponse retry(User user, Long id) {
+        var document = getLockedUserDocument(user, id);
+        if (!pipelineEnabled || !"failed".equals(document.getIndexingStatus()) || document.getSourceKey() == null) {
+            throw new CustomException(ErrorCode.DOCUMENT_RETRY_NOT_ALLOWED);
+        }
+        document.setIndexingStatus("pending");
+        document.setStatus("queued");
+        document.setProcessingError(null);
+        document.setProcessingToken(null);
+        return DocumentResponse.from(document);
+    }
+
+    private DocumentResponse enqueue(User user, MultipartFile file, String fileName) {
+        String type = fileName.substring(fileName.lastIndexOf('.') + 1).toLowerCase(Locale.ROOT);
+        if (!List.of("pdf", "txt", "md", "csv", "json").contains(type)) {
+            throw new CustomException(ErrorCode.UNSUPPORTED_DOCUMENT_TYPE);
+        }
+        if (file.getSize() > 20L * 1024 * 1024) throw new CustomException(ErrorCode.INVALID_REQUEST);
+        var document = documentRepository.save(LearningDocument.create(user, titleFromFileName(fileName),
+                fileName, file.getContentType(), file.getSize(), kindFromFileName(fileName)));
+        document.setStatus("queued");
+        document.setSourceType(type);
+        try {
+            document.setSourceKey(documentStore.putSource(user.getId(), document.getId(), file.getBytes()));
+        } catch (IOException exception) { throw new CustomException(ErrorCode.DOCUMENT_STORAGE_UNAVAILABLE); }
+        return DocumentResponse.from(document);
     }
 
     @Transactional(readOnly = true)
@@ -85,14 +130,27 @@ public class DocumentService {
     }
 
     @Transactional(readOnly = true)
+    public DocumentSearchResponse search(User user, String query, Integer limit, List<Long> documentIds) {
+        return new DocumentSearchResponse(searchResults(user, query, limit, documentIds));
+    }
+
+    @Transactional(readOnly = true)
     public List<DocumentSearchResult> searchResults(User user, String query, Integer limit) {
+        return searchResults(user, query, limit, null);
+    }
+
+    private List<DocumentSearchResult> searchResults(User user, String query, Integer limit, List<Long> documentIds) {
         String normalizedQuery = requireQuery(query);
         int resultLimit = normalizeLimit(limit);
         double[] queryEmbedding = embeddingService.embed(normalizedQuery);
+        Map<String, Double> sparseQuery = sparseEmbeddingService.embed(normalizedQuery);
+        if (documentIds != null) documentIds.forEach(id -> getUserDocument(user, id));
 
         return chunkRepository.findByDocument_UserAndDocument_RagEnabledTrue(user).stream()
-                .map(chunk -> toSearchResult(chunk, queryEmbedding))
-                .filter(result -> result.score() > 0.0d)
+                .filter(chunk -> "indexed".equals(chunk.getDocument().getIndexingStatus()))
+                .filter(chunk -> documentIds == null || documentIds.contains(chunk.getDocument().getId()))
+                .map(chunk -> toSearchResult(chunk, queryEmbedding, sparseQuery))
+                .filter(result -> result.score() >= 0.08d)
                 .sorted(Comparator.comparingDouble(DocumentSearchResult::score).reversed())
                 .limit(resultLimit)
                 .toList();
@@ -105,18 +163,24 @@ public class DocumentService {
 
         return results.stream()
                 .limit(3)
-                .map(result -> result.title() + ": " + truncate(result.content(), 240))
+                .map(result -> "[문서 " + result.documentId() + ", 청크 " + result.chunkId() + "] "
+                        + result.title() + " / " + (result.headingPath() == null ? "" : result.headingPath())
+                        + "\n" + truncate(result.content(), 1400))
                 .reduce((left, right) -> left + "\n" + right)
                 .orElse("");
     }
 
-    private DocumentSearchResult toSearchResult(DocumentChunk chunk, double[] queryEmbedding) {
+    private DocumentSearchResult toSearchResult(DocumentChunk chunk, double[] queryEmbedding, Map<String, Double> sparseQuery) {
         return new DocumentSearchResult(
                 String.valueOf(chunk.getDocument().getId()),
                 String.valueOf(chunk.getId()),
                 chunk.getDocument().getTitle(),
                 chunk.getContent(),
-                embeddingService.cosine(queryEmbedding, embeddingService.fromJson(chunk.getEmbeddingJson()))
+                SparseEmbeddingService.MODEL.equals(chunk.getEmbeddingModel())
+                        ? sparseEmbeddingService.score(sparseQuery, chunk.getEmbeddingJson())
+                        : embeddingService.cosine(queryEmbedding, embeddingService.fromJson(chunk.getEmbeddingJson())),
+                chunk.getBlockId(),
+                chunk.getHeadingPath()
         );
     }
 
@@ -125,6 +189,13 @@ public class DocumentService {
             throw new CustomException(ErrorCode.INVALID_REQUEST);
         }
         return documentRepository.findByIdAndUser(documentId, user)
+                .orElseThrow(() -> new CustomException(ErrorCode.DOCUMENT_NOT_FOUND));
+    }
+
+    private LearningDocument getLockedUserDocument(User user, Long documentId) {
+        if (documentId == null) throw new CustomException(ErrorCode.INVALID_REQUEST);
+        return documentRepository.findLockedById(documentId)
+                .filter(doc -> doc.getUser().getId().equals(user.getId()))
                 .orElseThrow(() -> new CustomException(ErrorCode.DOCUMENT_NOT_FOUND));
     }
 
@@ -146,13 +217,17 @@ public class DocumentService {
         if (fileName == null || fileName.isBlank()) {
             return "document.txt";
         }
-        return fileName.trim();
+        String safe = fileName.replace('\\', '/');
+        safe = safe.substring(safe.lastIndexOf('/') + 1).trim();
+        if (safe.isBlank() || safe.length() > 255) throw new CustomException(ErrorCode.INVALID_REQUEST);
+        return safe;
     }
 
     private String titleFromFileName(String fileName) {
         int dotIndex = fileName.lastIndexOf('.');
         String title = dotIndex > 0 ? fileName.substring(0, dotIndex) : fileName;
-        return title.replace('-', ' ').replace('_', ' ').trim();
+        title = title.replace('-', ' ').replace('_', ' ').trim();
+        return title.substring(0, Math.min(title.length(), 160));
     }
 
     private String kindFromFileName(String fileName) {

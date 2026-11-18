@@ -2,6 +2,11 @@ spring:
   application:
     name: rubberduck
 
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 21MB
+
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/rubberduck}
     username: ${DB_USERNAME:rubberduck}
@@ -48,3 +53,12 @@ app:
 
 server:
   port: 8080
+
+document:
+  pipeline-enabled: ${DOCUMENT_PIPELINE_ENABLED:false}
+  worker-url: ${RAG_WORKER_URL:http://127.0.0.1:8091}
+  worker-token: ${RAG_WORKER_TOKEN:}
+  storage-root: ${DOCUMENT_STORAGE_ROOT:./data/documents}
+
+chat:
+  response-mode: ${CHAT_RESPONSE_MODE:llm}

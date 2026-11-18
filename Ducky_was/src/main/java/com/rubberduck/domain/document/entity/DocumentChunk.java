@@ -44,6 +44,18 @@ public class DocumentChunk {
     @Column(name = "embedding_json", nullable = false)
     private String embeddingJson;
 
+    @Column(length = 80)
+    private String embeddingModel;
+
+    @Column(length = 100)
+    private String blockId;
+
+    @Column(columnDefinition = "text")
+    private String headingPath;
+
+    @Column(columnDefinition = "text")
+    private String provenanceJson;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 

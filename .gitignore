@@ -1,0 +1,14 @@
+.venv-rag/
+.runtime/
+__pycache__/
+.pytest_cache/
+pytest-cache-files-*/
+*.tsbuildinfo
+
+# Local plans, work reports, and attachments
+/Ducky_*_최종_구축_계획.md
+/docs/RAG_*_작업보고.md
+/.codex-remote-attachments/
+
+# Local reference checkout
+/2026-plantdoctor-rag-pipeline/

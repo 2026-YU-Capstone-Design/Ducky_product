@@ -24,6 +24,8 @@ export interface ChatMessage {
   hintLevel?: 1 | 2 | 3;
   hintNumber?: number;
   attachments?: ChatAttachment[];
+  sources?: import("@/lib/api/documents").DocumentSearchResult[];
+  responseMode?: string | null;
 }
 
 export type SessionProgressStatus = "learning" | "completed";

@@ -1,6 +1,10 @@
 package com.rubberduck.domain.chat.entity;
 
 import java.time.Instant;
+import java.util.List;
+import com.rubberduck.domain.document.dto.DocumentSearchResult;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -37,6 +41,21 @@ public class ChatMessage {
 
     @Column(name = "message_text", nullable = false, length = 4000)
     private String messageText;
+
+    @Column(columnDefinition = "text")
+    private String sourcesJson;
+
+    @Column(length = 30)
+    private String responseMode;
+
+    public void setSources(List<DocumentSearchResult> sources) {
+        sourcesJson = new ObjectMapper().writeValueAsString(sources);
+    }
+
+    public List<DocumentSearchResult> getSources() {
+        if (sourcesJson == null || sourcesJson.isBlank()) return List.of();
+        return new ObjectMapper().readValue(sourcesJson, new TypeReference<List<DocumentSearchResult>>() {});
+    }
 
     @Column(name = "message_type", nullable = false, length = 40)
     private String messageType;

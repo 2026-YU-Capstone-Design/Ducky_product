@@ -9,7 +9,9 @@ public record MessageResponse(
         String type,
         String createdAt,
         Integer hintLevel,
-        Integer hintNumber
+        Integer hintNumber,
+        java.util.List<com.rubberduck.domain.document.dto.DocumentSearchResult> sources,
+        String responseMode
 ) {
 
     public static MessageResponse from(ChatMessage message) {
@@ -20,7 +22,9 @@ public record MessageResponse(
                 message.getMessageType(),
                 message.getCreatedAt().toString(),
                 message.getHintLevel(),
-                message.getHintNumber()
+                message.getHintNumber(),
+                message.getSources(),
+                message.getResponseMode()
         );
     }
 }
