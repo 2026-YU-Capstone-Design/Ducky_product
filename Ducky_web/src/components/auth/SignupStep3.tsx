@@ -61,11 +61,11 @@ export function SignupStep3({
   setSignupStep,
 }: SignupStep3Props) {
   return (
-    <div className="flex w-full flex-col items-start space-y-7 pt-0 animate-fade-in duration-300 sm:space-y-8 sm:pt-2">
+    <div className="animate-fade-in flex w-full flex-col items-start space-y-8 pt-0 duration-300 sm:space-y-10 sm:pt-2">
       <button
         type="button"
         onClick={() => setSignupStep(2)}
-        className="p-1 hover:bg-zinc-200/50 rounded-full transition-colors -ml-1.5 focus:outline-none"
+        className="-ml-1.5 cursor-pointer"
         aria-label="뒤로가기"
       >
         <ChevronLeft className="h-7 w-7 text-[#333333]" />
@@ -82,12 +82,14 @@ export function SignupStep3({
             type="password"
             value={password}
             onChange={handlePasswordChange}
-            className="w-full bg-transparent border-b border-zinc-300 focus:border-[#FECA43] focus:outline-none text-lg font-bold text-[#333333] pb-2 transition-colors placeholder:text-zinc-300 placeholder:text-sm placeholder:font-medium"
+            className="w-full bg-transparent border-b border-zinc-300 focus:border-[#FECA43] focus:outline-none text-lg font-bold text-[#333333] py-2 transition-colors placeholder:text-zinc-300 placeholder:text-sm placeholder:font-medium"
             placeholder="특수문자(!,@,#,&,*), 숫자, 문자의 조합, 8~16자"
             required
           />
           {passwordError && (
-            <p className="text-xs font-bold text-red-500 pt-1">{passwordError}</p>
+            <p className="text-xs font-bold text-red-500 pt-1">
+              {passwordError}
+            </p>
           )}
         </div>
 
@@ -99,7 +101,7 @@ export function SignupStep3({
             type="password"
             value={passwordConfirm}
             onChange={handlePasswordConfirmChange}
-            className="w-full bg-transparent border-b border-zinc-300 focus:border-[#FECA43] focus:outline-none text-lg font-bold text-[#333333] pb-2 transition-colors placeholder:text-zinc-300 placeholder:text-sm placeholder:font-medium"
+            className="w-full bg-transparent border-b border-zinc-300 focus:border-[#FECA43] focus:outline-none text-lg font-bold text-[#333333] py-2 transition-colors placeholder:text-zinc-300 placeholder:text-sm placeholder:font-medium"
             placeholder="비밀번호 재입력"
             required
           />
@@ -116,15 +118,14 @@ export function SignupStep3({
         </div>
       </div>
 
-      {/* 약관 동의 체크박스 */}
       <div className="w-full space-y-3 pt-4 border-t border-zinc-100">
         <div className="flex items-start justify-between gap-3 group">
-          <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-3">
+          <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-3 rounded focus-within:outline-2 focus-within:outline-amber-500">
             <div
               className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors ${
                 agreeTerms
                   ? "bg-[#FECA43] border-[#FECA43]"
-                  : "border-zinc-300 bg-white group-hover:border-[#FECA43]/50"
+                  : "border-zinc-300 bg-white"
               }`}
             >
               {agreeTerms && (
@@ -133,7 +134,7 @@ export function SignupStep3({
             </div>
             <input
               type="checkbox"
-              className="hidden"
+              className="sr-only"
               checked={agreeTerms}
               onChange={(e) => setAgreeTerms(e.target.checked)}
             />
@@ -144,19 +145,19 @@ export function SignupStep3({
           <button
             type="button"
             onClick={() => setShowTerms("service")}
-            className="shrink-0 text-xs font-bold text-zinc-400 underline underline-offset-2 hover:text-zinc-600"
+            className="shrink-0 text-xs font-bold text-zinc-400 underline underline-offset-2 hover:text-zinc-600 cursor-pointer"
           >
             보기
           </button>
         </div>
 
         <div className="flex items-start justify-between gap-3 group">
-          <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-3">
+          <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-3 rounded focus-within:outline-2 focus-within:outline-amber-500">
             <div
               className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors ${
                 agreeMarketing
                   ? "bg-[#FECA43] border-[#FECA43]"
-                  : "border-zinc-300 bg-white group-hover:border-[#FECA43]/50"
+                  : "border-zinc-300 bg-white"
               }`}
             >
               {agreeMarketing && (
@@ -165,7 +166,7 @@ export function SignupStep3({
             </div>
             <input
               type="checkbox"
-              className="hidden"
+              className="sr-only"
               checked={agreeMarketing}
               onChange={(e) => setAgreeMarketing(e.target.checked)}
             />
@@ -176,7 +177,7 @@ export function SignupStep3({
           <button
             type="button"
             onClick={() => setShowTerms("marketing")}
-            className="shrink-0 text-xs font-bold text-zinc-400 underline underline-offset-2 hover:text-zinc-600"
+            className="shrink-0 text-xs font-bold text-zinc-400 underline underline-offset-2 hover:text-zinc-600 cursor-pointer"
           >
             보기
           </button>
@@ -194,7 +195,7 @@ export function SignupStep3({
             !agreeTerms ||
             isLoading
           }
-          className={`h-auto min-h-14 w-full whitespace-normal rounded-xl border-none px-4 py-3 text-base font-bold leading-tight shadow-none transition-all active:scale-[0.99] ${
+          className={`h-auto min-h-14 w-full whitespace-normal rounded-xl border-none px-4 py-3 text-base font-bold leading-tight shadow-none transition-all active:scale-[0.99] cursor-pointer ${
             password &&
             !passwordError &&
             passwordConfirm &&

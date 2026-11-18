@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertCircle, Bot, Lightbulb, Loader2, Mic, RefreshCw } from "lucide-react";
+import { AlertCircle, Lightbulb, Loader2, Mic, RefreshCw } from "lucide-react";
 import { Comfortaa } from "next/font/google";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
@@ -268,10 +268,10 @@ export function ChatPage() {
   );
 
   return (
-    <div className="flex h-[calc(100dvh-5.75rem)] min-h-0 w-full bg-[#FAF8F5] transition-colors dark:bg-[#171512] md:h-dvh">
+    <div className="flex h-full min-h-0 w-full bg-[#FFFCF3] transition-colors dark:bg-[#16130A] md:h-dvh">
       <div className="flex min-h-0 w-full gap-4 p-0 sm:p-4 lg:p-6">
-        <section className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#FAF8F5] transition-colors dark:bg-[#171512] sm:rounded-lg sm:border sm:border-[#E7DDC8] sm:bg-white sm:shadow-sm sm:dark:border-white/10 sm:dark:bg-[#201D19] sm:dark:shadow-none">
-          <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[#E7DDC8] bg-[#FAF8F5] px-4 py-3 transition-colors dark:border-white/10 dark:bg-[#201D19] sm:bg-white lg:px-5">
+        <section className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#FFFCF3] transition-colors dark:bg-[#16130A] sm:rounded-2xl sm:border sm:border-[#F0E0A8] sm:shadow-sm sm:dark:border-[#5C4413]/40 sm:dark:shadow-none">
+          <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[#F0E0A8] bg-white px-5 py-4 transition-colors dark:border-[#5C4413]/40 dark:bg-[#221C0D]">
             <div className="flex min-w-0 items-center gap-3">
               <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[#FECA43]">
                 <Image
@@ -303,7 +303,7 @@ export function ChatPage() {
                 aria-label={raspberryButtonLabel}
                 disabled={isRaspberryButtonDisabled}
                 onClick={() => void handleRaspberryTalk()}
-                className="h-9 gap-2 border-[#E7DDC8] bg-white px-2.5 font-bold text-[#4A4438] hover:bg-[#FFF7E0] dark:border-white/10 dark:bg-[#24211D] dark:text-gray-200 dark:hover:bg-[#2A251D]"
+                className="h-9 gap-2 rounded-full border-[#F0E0A8] bg-white px-2.5 font-bold text-[#4A4438] hover:bg-[#FFF7E0] dark:border-white/10 dark:bg-[#24211D] dark:text-gray-200 dark:hover:bg-[#2A251D]"
               >
                 {isRaspberryBusy ? (
                   <Loader2 className="size-4 animate-spin" aria-hidden="true" />
@@ -316,7 +316,7 @@ export function ChatPage() {
               <Button
                 type="button"
                 onClick={() => setIsHintOpen(true)}
-                className="h-9 gap-2 bg-[#FECA43] px-3 font-bold text-[#2E2A22] hover:bg-[#F5B522] lg:hidden"
+                className="h-9 gap-2 rounded-full bg-[#FECA43] px-3 font-bold text-[#2E2A22] hover:bg-[#F5B522] lg:hidden"
               >
                 <Lightbulb className="size-4" aria-hidden="true" />
                 힌트
@@ -326,8 +326,8 @@ export function ChatPage() {
 
           <ScrollArea className="min-h-0 flex-1">
             <div className="space-y-4 px-3 py-5 sm:px-5 lg:px-8">
-              <div className="mx-auto max-w-3xl rounded-lg border border-[#E7DDC8] bg-[#FFF7E0] px-4 py-3 text-sm leading-relaxed text-[#4A4438] break-keep transition-colors dark:border-[#6B5A32] dark:bg-[#2A251D] dark:text-gray-300">
-                <p className="font-bold text-[#6B5200] dark:text-[#FECA43]">
+              <div className="mx-auto max-w-3xl rounded-2xl border border-[#F0E0A8] bg-[#FFF6DC] px-4 py-3 text-sm leading-relaxed text-[#5C4413] break-keep transition-colors dark:border-[#5C4413]/40 dark:bg-[#2A2310] dark:text-[#E8C97A]">
+                <p className="font-bold text-[#3D2E0A] dark:text-[#FECA43]">
                   오늘의 대화 목표
                 </p>
                 <p className="mt-1">
@@ -376,13 +376,21 @@ export function ChatPage() {
 
               {isThinking && (
                 <div className="flex items-end gap-2">
-                  <div className="flex size-8 shrink-0 items-center justify-center rounded-full border border-[#E7DDC8] bg-white text-[#B88700] transition-colors dark:border-white/10 dark:bg-[#24211D]">
-                    <Bot className="size-4" aria-hidden="true" />
+                  <div className="relative size-[30px] shrink-0 overflow-hidden rounded-full bg-[#FECA43]">
+                    <Image
+                      src="/icons/ducky-character.png"
+                      alt="Ducky"
+                      width={30}
+                      height={30}
+                      className="size-full object-cover"
+                    />
                   </div>
-                  <div className="rounded-lg border border-[#E7DDC8] bg-white px-4 py-3 text-sm text-gray-600 shadow-sm transition-colors dark:border-white/10 dark:bg-[#24211D] dark:text-gray-300 dark:shadow-none">
-                    Ducky가 다음 질문을 고르는 중
-                    <span className="ml-1 inline-flex w-6 animate-pulse">
-                      ...
+                  <div className="rounded-[14px] rounded-bl-[4px] border border-[#F0E0A8] bg-[#FFF6DC] px-[15px] py-[11px] transition-colors dark:border-[#5C4413]/40 dark:bg-[#2A2310]">
+                    <span role="status" className="inline-flex gap-1">
+                      <span className="sr-only">Ducky가 다음 질문을 고르는 중</span>
+                      <span className="size-1.5 animate-bounce rounded-full bg-[#C4A85A] [animation-delay:-0.3s]" />
+                      <span className="size-1.5 animate-bounce rounded-full bg-[#C4A85A] [animation-delay:-0.15s]" />
+                      <span className="size-1.5 animate-bounce rounded-full bg-[#C4A85A]" />
                     </span>
                   </div>
                 </div>
@@ -412,13 +420,13 @@ export function ChatPage() {
       <Sheet open={isHintOpen} onOpenChange={setIsHintOpen}>
         <SheetContent
           side="bottom"
-          className="max-h-[84dvh] rounded-t-lg bg-[#FAF8F5] p-0 dark:bg-[#171512]"
+          className="max-h-[84dvh] rounded-t-2xl bg-[#FFFCF3] p-0 dark:bg-[#16130A]"
         >
-          <SheetHeader className="border-b border-[#E7DDC8] bg-white p-4 pr-12 dark:border-white/10 dark:bg-[#201D19]">
-            <SheetTitle className="text-lg font-bold dark:text-white">
+          <SheetHeader className="border-b border-[#F0E0A8] bg-white p-4 pr-12 dark:border-[#5C4413]/40 dark:bg-[#221C0D]">
+            <SheetTitle className="text-lg font-bold text-[#3D2E0A] dark:text-[#F0E0C4]">
               힌트 패널
             </SheetTitle>
-            <SheetDescription className="dark:text-gray-400">
+            <SheetDescription className="text-[#8A6A28] dark:text-[#C4A85A]">
               막히는 지점에서 단서를 계속 요청하고, 알겠으면 완료하세요.
             </SheetDescription>
           </SheetHeader>

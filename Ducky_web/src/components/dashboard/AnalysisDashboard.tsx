@@ -3,20 +3,13 @@
 import { useMemo } from "react";
 import {
   AlertCircle,
-  BarChart3,
   Brain,
-  CheckCircle2,
-  Flame,
-  Lightbulb,
   Loader2,
   RefreshCw,
   Target,
   TrendingUp,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Progress, ProgressLabel } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useDashboardData } from "@/hooks/useDashboardData";
 import { cn } from "@/lib/utils";
@@ -67,15 +60,6 @@ const priorityLabels: Record<ImprovementPoint["priority"], string> = {
   high: "중요",
   medium: "보통",
   low: "낮음",
-};
-
-const priorityStyles: Record<ImprovementPoint["priority"], string> = {
-  high:
-    "border-[#F2B8A2] bg-[#FFF0EA] text-[#8A3B20] dark:border-[#F2B8A2]/50 dark:bg-[#2A211D] dark:text-[#F2B8A2]",
-  medium:
-    "border-[#FECA43] bg-[#FFF7E0] text-[#6B5200] dark:border-[#FECA43]/60 dark:bg-[#2A251D] dark:text-[#FECA43]",
-  low:
-    "border-[#BFD8C4] bg-[#EAF7ED] text-[#236B35] dark:border-[#BFD8C4]/40 dark:bg-[#1D2A22] dark:text-[#BFD8C4]",
 };
 
 const hintLabels: Record<HintUsage["level"], string> = {
@@ -276,42 +260,45 @@ function buildAnalysis(user: User | null, sessions: Session[]): AnalysisSummary 
   };
 }
 
-function completionText(analysis: AnalysisSummary) {
-  return `${analysis.completedSessions}/${analysis.totalSessions}`;
-}
-
 function HintUsageBars({ hints }: { hints: HintUsage[] }) {
   const maxCount = Math.max(...hints.map((hint) => hint.count), 1);
+  const sizeMap = hints.map((h) => {
+    const ratio = h.count / maxCount;
+    if (ratio >= 0.8) return "text-[32px]";
+    if (ratio >= 0.4) return "text-[22px]";
+    return "text-[14px]";
+  });
 
   return (
-    <div className="mt-5 space-y-4">
-      {hints.map((hint) => {
-        const width = hint.count === 0 ? "0%" : `${Math.max((hint.count / maxCount) * 100, 8)}%`;
-
-        return (
-          <div key={hint.level} className="min-w-0">
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-sm font-bold text-gray-950 dark:text-white">
-                  Level {hint.level}
-                </p>
-                <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">
-                  {hint.label}
-                </p>
-              </div>
-              <span className="shrink-0 text-sm font-bold tabular-nums text-gray-950 dark:text-white">
-                {hint.count}회
-              </span>
-            </div>
-            <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#E7DDC8] dark:bg-white/10">
-              <div
-                className="h-full rounded-full bg-[#245C7A]"
-                style={{ width }}
-              />
-            </div>
+    <div className="flex h-full flex-col divide-y divide-[#f0e4cc] dark:divide-white/8">
+      {hints.map((hint, i) => (
+        <div
+          key={hint.level}
+          className="flex flex-1 items-center justify-between gap-2"
+        >
+          <div>
+            <span className="text-sm font-bold text-gray-900 dark:text-white">
+              Lv.{hint.level}
+            </span>
+            <span className="ml-1.5 text-xs text-[#876c45] dark:text-gray-400">
+              {hint.label}
+            </span>
           </div>
-        );
-      })}
+          <div className="flex shrink-0 items-baseline gap-0.5">
+            <span
+              className={cn(
+                "font-black leading-none tabular-nums tracking-tight text-amber-900 dark:text-amber-300",
+                sizeMap[i],
+              )}
+            >
+              {hint.count}
+            </span>
+            <span className="text-xs font-semibold text-[#876c45] dark:text-gray-500">
+              회
+            </span>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -325,26 +312,35 @@ function TopicProgressList({ topics }: { topics: TopicProgress[] }) {
     );
   }
 
+  const sorted = [...topics].sort(
+    (a, b) => b.progress - a.progress,
+  );
   return (
-    <div className="mt-5 space-y-5">
-      {topics.map((topic) => (
-        <div key={topic.topic} className="min-w-0">
-          <Progress
-            value={topic.progress}
-            className="[&_[data-slot=progress-indicator]]:bg-[#236B35] [&_[data-slot=progress-track]]:h-2 [&_[data-slot=progress-track]]:bg-[#E7DDC8] dark:[&_[data-slot=progress-track]]:bg-white/10"
-          >
-            <ProgressLabel className="min-w-0 text-sm font-bold text-gray-950 dark:text-white">
+    <div className="divide-y divide-[#f5e8cc] dark:divide-white/8">
+      {sorted.map((topic) => (
+        <div
+          key={topic.topic}
+          className="flex items-center gap-4 py-3 first:pt-0 last:pb-0"
+        >
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-bold text-gray-900 dark:text-white">
               {topic.topic}
-            </ProgressLabel>
-            <span className="ml-auto text-sm font-bold text-gray-950 dark:text-white">
+            </p>
+            <p className="mt-0.5 text-[11px] text-[#876c45] dark:text-gray-400">
+              {topic.completedSessions}/{topic.totalSessions}개 ·{" "}
+              {formatDate(topic.lastPracticedAt)}
+            </p>
+          </div>
+          <div className="flex w-28 shrink-0 items-center gap-2">
+            <div className="h-[5px] flex-1 overflow-hidden rounded-full bg-[#f5e8cc] dark:bg-white/10">
+              <div
+                className="h-full rounded-full bg-amber-400"
+                style={{ width: `${topic.progress}%` }}
+              />
+            </div>
+            <span className="w-8 text-right text-xs font-bold tabular-nums text-gray-900 dark:text-white">
               {topic.progress}%
             </span>
-          </Progress>
-          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
-            <span>
-              완료 {topic.completedSessions}/{topic.totalSessions}
-            </span>
-            <span>최근 {formatDate(topic.lastPracticedAt)}</span>
           </div>
         </div>
       ))}
@@ -352,28 +348,47 @@ function TopicProgressList({ topics }: { topics: TopicProgress[] }) {
   );
 }
 
-function ImprovementList({ points }: { points: ImprovementPoint[] }) {
+function ImprovementTimeline({ points }: { points: ImprovementPoint[] }) {
+  const order: ImprovementPoint["priority"][] = ["high", "medium", "low"];
+  const sorted = [...points].sort(
+    (a, b) => order.indexOf(a.priority) - order.indexOf(b.priority),
+  );
   return (
-    <div className="space-y-3">
-      {points.map((point) => (
-        <article
-          key={point.id}
-          className="rounded-lg border border-[#E7DDC8] bg-[#FAF8F5] p-4 transition-colors dark:border-white/10 dark:bg-[#1D1B18]"
-        >
-          <div className="flex items-start justify-between gap-3">
-            <h3 className="min-w-0 text-sm font-bold leading-snug text-gray-950 break-keep dark:text-white">
+    <div>
+      {sorted.map((point, i) => (
+        <article key={point.id} className="flex gap-3 pb-4 last:pb-0">
+          <div className="flex w-5 shrink-0 flex-col items-center pt-1">
+            <span
+              className={cn(
+                "size-2 shrink-0 rounded-full",
+                point.priority === "high"
+                  ? "bg-amber-500"
+                  : "bg-[#e8dcc8] dark:bg-white/15",
+              )}
+            />
+            {i < sorted.length - 1 && (
+              <span className="mt-1.5 w-px flex-1 bg-[#f0e4cc] dark:bg-white/10" />
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-sm font-bold leading-snug text-gray-900 break-keep dark:text-white">
               {point.title}
             </h3>
-            <Badge
-              variant="outline"
-              className={cn("shrink-0", priorityStyles[point.priority])}
-            >
-              {priorityLabels[point.priority]}
-            </Badge>
+            <p className="mt-1 text-xs leading-relaxed text-gray-500 break-keep dark:text-gray-400">
+              {point.description}
+            </p>
           </div>
-          <p className="mt-2 text-sm leading-relaxed text-gray-600 break-keep dark:text-gray-300">
-            {point.description}
-          </p>
+          <div className="flex w-10 shrink-0 items-start justify-center pt-1">
+            {point.priority === "high" ? (
+              <span className="inline-flex rounded-full border border-[#f5d87a] bg-[#fef3c7] px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:border-amber-700/40 dark:bg-amber-900/30 dark:text-amber-300">
+                {priorityLabels[point.priority]}
+              </span>
+            ) : (
+              <span className="text-[10px] font-medium text-[#876c45] dark:text-gray-500">
+                {priorityLabels[point.priority]}
+              </span>
+            )}
+          </div>
         </article>
       ))}
     </div>
@@ -390,25 +405,25 @@ function TopicDetailList({ topics }: { topics: TopicProgress[] }) {
   }
 
   return (
-    <div className="divide-y divide-[#E7DDC8] dark:divide-white/10">
+    <div className="divide-y divide-[#f0e4cc] dark:divide-white/8">
       {topics.map((topic) => (
         <div
           key={topic.topic}
-          className="grid gap-3 py-4 first:pt-0 last:pb-0 sm:grid-cols-[minmax(0,1fr)_8rem]"
+          className="grid gap-3 py-3 first:pt-0 last:pb-0 sm:grid-cols-[minmax(0,1fr)_5rem]"
         >
           <div className="min-w-0">
-            <p className="font-bold text-gray-950 dark:text-white">
+            <p className="text-sm font-bold text-gray-900 dark:text-white">
               {topic.topic}
             </p>
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-              최근 학습 {formatDate(topic.lastPracticedAt)}
+            <p className="mt-0.5 text-xs text-[#876c45] dark:text-gray-400">
+              최근 {formatDate(topic.lastPracticedAt)}
             </p>
           </div>
           <div className="sm:text-right">
-            <p className="text-lg font-bold tabular-nums text-gray-950 dark:text-white">
+            <p className="text-base font-bold tabular-nums text-gray-900 dark:text-white">
               {topic.progress}%
             </p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
+            <p className="text-xs text-[#876c45] dark:text-gray-400">
               {topic.completedSessions}개 완료
             </p>
           </div>
@@ -448,265 +463,240 @@ export function AnalysisDashboard() {
       ]
     : [];
 
-  const statCards = analysis
-    ? [
-        {
-          label: "전체 세션",
-          value: `${analysis.totalSessions}개`,
-          detail: `${analysis.completedSessions}개 완료`,
-          icon: BarChart3,
-          tone: "text-[#245C7A]",
-          bg: "bg-[#EAF4F8]",
-        },
-        {
-          label: "완료율",
-          value:
-            analysis.totalSessions === 0
-              ? "0%"
-              : `${Math.round(
-                  (analysis.completedSessions / analysis.totalSessions) * 100,
-                )}%`,
-          detail: "최근 학습 기준",
-          icon: CheckCircle2,
-          tone: "text-[#236B35]",
-          bg: "bg-[#EAF7ED]",
-        },
-        {
-          label: "연속 학습",
-          value: `${analysis.currentStreakDays}일`,
-          detail: "꾸준한 복습 흐름",
-          icon: Flame,
-          tone: "text-[#B88700]",
-          bg: "bg-[#FFF1BC]",
-        },
-        {
-          label: "평균 힌트",
-          value: `${analysis.averageHintCount}회`,
-          detail: "세션당 사용량",
-          icon: Lightbulb,
-          tone: "text-[#7A4C12]",
-          bg: "bg-[#F7E7CE]",
-        },
-      ]
-    : [];
+  const completionRate = analysis?.totalSessions
+    ? Math.round((analysis.completedSessions / analysis.totalSessions) * 100)
+    : 0;
 
   return (
-    <section className="mx-auto flex w-full max-w-7xl flex-1 flex-col px-5 py-8 sm:px-8 lg:px-10">
-      <div className="border-b border-[#E7DDC8] pb-8 dark:border-white/10">
-        <p className="text-sm font-semibold text-[#B88700]">학습 분석</p>
-        <div className="mt-3 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="min-w-0">
-            <h1 className="max-w-3xl text-3xl font-bold leading-tight tracking-tight text-gray-950 break-keep dark:text-white sm:text-4xl">
-              학습 흐름을 한 번에 확인하세요
-            </h1>
-            <p className="mt-4 max-w-3xl text-base leading-relaxed text-gray-600 break-keep dark:text-gray-300">
-              실제 세션 기록과 학습 유형을 기준으로 진행률, 힌트 사용량,
-              다음 개선 포인트를 정리했습니다.
+    <div className="flex min-h-full w-full flex-1 flex-col bg-[#FFFCF3] transition-colors dark:bg-[#16130A]">
+      <section className="mx-auto flex w-full max-w-7xl flex-1 flex-col px-5 py-8 sm:px-8 lg:px-10">
+        <div className="py-6 mb-2 ">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-1 mb-3 text-[10px] font-bold tracking-[0.12em] text-amber-700 uppercase dark:bg-amber-900/40 dark:text-amber-300">
+            <span className="size-1.5 rounded-full bg-amber-400 animate-pulse" />
+            Learning Analysis Report
+          </span>
+          <h1 className="mt-3 text-[30px] font-black leading-[1.15] tracking-[-1px] text-gray-950 dark:text-white sm:text-[40px]">
+            지금까지 잘<br className="sm:hidden" /> 달려왔어요
+            <span className="text-amber-400">.</span>
+          </h1>
+          <div className="mt-4 ml-1.5 flex items-center justify-between gap-4">
+            <p className="text-[13px] font-medium leading-relaxed text-[#806437] dark:text-amber-400/70">
+              세션 기록을 바탕으로 강점과 다음 액션을 정리했어요.
             </p>
-          </div>
-
-          <div className="rounded-lg border border-[#E7DDC8] bg-white px-4 py-3 dark:border-white/10 dark:bg-[#24211D]">
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              최근 업데이트
-            </p>
-            <p className="mt-1 text-sm font-bold text-gray-950 dark:text-white">
-              {analysis ? formatDate(analysis.updatedAt) : "-"}
+            <p className="shrink-0 text-[11px] text-[#876c45] dark:text-gray-500">
+              {analysis && `${formatDate(analysis.updatedAt)} 기준`}
             </p>
           </div>
         </div>
-      </div>
-
-      {(isLoading || error || !analysis) && (
-        <div className="mt-6 rounded-lg border border-[#E7DDC8] bg-white px-4 py-3 text-sm text-gray-600 shadow-sm dark:border-white/10 dark:bg-[#24211D] dark:text-gray-300">
-          {isLoading || !analysis ? (
-            <span className="inline-flex items-center gap-2">
-              <Loader2 className="size-4 animate-spin text-[#B88700]" />
-              분석 데이터를 불러오는 중입니다.
-            </span>
-          ) : (
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <span className="inline-flex min-w-0 items-start gap-2 text-red-600 dark:text-red-200">
-                <AlertCircle className="mt-0.5 size-4 shrink-0" />
-                <span className="break-keep">{error}</span>
+        {(isLoading || error || !analysis) && (
+          <div className="mt-6 rounded-lg border border-[#E7DDC8] bg-white px-4 py-3 text-sm text-gray-600 shadow-sm dark:border-white/10 dark:bg-[#24211D] dark:text-gray-300">
+            {isLoading || (!analysis && !error) ? (
+              <span className="inline-flex items-center gap-2">
+                <Loader2 className="size-4 animate-spin text-[#B88700]" />
+                분석 데이터를 불러오는 중입니다.
               </span>
-              <Button
-                type="button"
-                variant="outline"
-                className="h-9 shrink-0 gap-2"
-                onClick={() => void retry()}
-              >
-                <RefreshCw className="size-4" />
-                다시 시도
-              </Button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {analysis && (
-        <>
-          <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {statCards.map((stat) => {
-              const Icon = stat.icon;
-
-              return (
-                <Card
-                  key={stat.label}
-                  className="rounded-lg border border-[#E7DDC8] bg-white py-0 shadow-sm transition-colors dark:border-white/10 dark:bg-[#24211D] dark:shadow-none"
+            ) : (
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <span className="inline-flex min-w-0 items-start gap-2 text-red-600 dark:text-red-200">
+                  <AlertCircle className="mt-0.5 size-4 shrink-0" />
+                  <span className="break-keep">{error}</span>
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-9 shrink-0 gap-2"
+                  onClick={() => void retry()}
                 >
-                  <CardContent className="flex min-h-32 flex-col justify-between p-5">
-                    <span
-                      className={cn(
-                        "flex size-10 items-center justify-center rounded-lg",
-                        stat.bg,
-                        "dark:bg-[#2A251D]",
-                      )}
-                    >
-                      <Icon className={cn("size-5", stat.tone)} />
-                    </span>
-                    <div>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">
-                        {stat.label}
-                      </p>
-                      <p className="mt-1 text-2xl font-bold tracking-tight text-gray-950 dark:text-white">
-                        {stat.value}
-                      </p>
-                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                        {stat.detail}
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
+                  <RefreshCw className="size-4" />
+                  다시 시도
+                </Button>
+              </div>
+            )}
           </div>
-
-          <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem]">
-            <div className="min-w-0 space-y-6">
-              <Card className="rounded-lg border border-[#E7DDC8] bg-white py-0 shadow-sm transition-colors dark:border-white/10 dark:bg-[#24211D] dark:shadow-none">
-                <CardContent className="p-5">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold text-[#B88700]">
-                        주제별 진행률
-                      </p>
-                      <h2 className="mt-2 text-xl font-bold tracking-tight text-gray-950 dark:text-white">
-                        완료 흐름
-                      </h2>
-                    </div>
-                    <Badge className="bg-[#EAF7ED] text-[#236B35] dark:bg-[#1D2A22] dark:text-[#BFD8C4]">
-                      {completionText(analysis)} 완료
-                    </Badge>
+        )}
+        {analysis && (
+          <>
+            <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-[1.6fr_1fr_1fr]">
+              <div
+                className="relative overflow-hidden rounded-3xl border border-amber-200/50 p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-12px_rgba(217,119,6,0.12)] [background:linear-gradient(to_bottom_right,#fffbeb,#ffffff,#fefce8)] dark:border-white/8 dark:[background:#1E1B16] dark:shadow-none"
+              >
+                <div className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full bg-amber-200/30 blur-3xl dark:hidden" />
+                <div className="pointer-events-none absolute -bottom-8 left-1/3 h-20 w-20 rounded-full bg-yellow-200/30 blur-2xl dark:hidden" />
+                <div className="relative">
+                  <p className="mb-2.5 text-[10px] font-semibold uppercase tracking-widest text-amber-600 dark:text-amber-400">
+                    완료율
+                  </p>
+                  <div className="mb-1.5 flex items-baseline gap-1">
+                    <span className="text-[52px] font-extrabold leading-none tabular-nums tracking-tight text-gray-950 dark:text-white">
+                      {completionRate}
+                    </span>
+                    <span className="text-xl font-bold text-[#876c45] dark:text-gray-500">
+                      %
+                    </span>
                   </div>
+                  <p className="mb-4 text-xs text-[#876c45] dark:text-gray-400">
+                    {analysis.completedSessions}/{analysis.totalSessions}개
+                    세션 완료
+                  </p>
+                  <div className="h-[5px] overflow-hidden rounded-full bg-[#f5e8cc] dark:bg-white/10">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-amber-400 to-orange-400"
+                      style={{ width: `${completionRate}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
 
-                  <TopicProgressList topics={analysis.topicProgress} />
-                </CardContent>
-              </Card>
-
-              <Card className="rounded-lg border border-[#E7DDC8] bg-white py-0 shadow-sm transition-colors dark:border-white/10 dark:bg-[#24211D] dark:shadow-none">
-                <CardContent className="p-5">
-                  <Tabs defaultValue="improvements" className="gap-5">
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold text-[#B88700]">
-                          최근 분석
-                        </p>
-                        <h2 className="mt-2 text-xl font-bold tracking-tight text-gray-950 dark:text-white">
-                          다음 학습 포인트
-                        </h2>
-                      </div>
-                      <TabsList className="h-9 w-full bg-[#FAF8F5] dark:bg-[#1D1B18] sm:w-fit">
-                        <TabsTrigger value="improvements" className="px-3">
-                          개선 포인트
-                        </TabsTrigger>
-                        <TabsTrigger value="topics" className="px-3">
-                          주제 상세
-                        </TabsTrigger>
-                      </TabsList>
+              <div className="grid grid-cols-2 gap-4 sm:contents">
+                <div className="relative overflow-hidden rounded-2xl border border-amber-200/40 bg-[#fef3c7] p-5 dark:border-white/8 dark:bg-[#1E1B16]">
+                  <span className="absolute right-4 top-4 text-right text-[11px] font-extrabold leading-[1.4] tracking-[.08em] text-amber-700/30 uppercase dark:text-amber-200/15">
+                    연속
+                    <br />
+                    학습
+                  </span>
+                  <div className="pt-9">
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-[52px] font-black leading-none tabular-nums tracking-[-3px] text-amber-900 dark:text-white">
+                        {analysis.currentStreakDays}
+                      </span>
+                      <span className="text-base font-bold text-amber-700/30 dark:text-gray-500">
+                        일
+                      </span>
                     </div>
+                    <p className="mt-2 text-[13px] font-semibold text-amber-800/50 dark:text-gray-400">
+                      꾸준한 복습 흐름
+                    </p>
+                  </div>
+                </div>
 
-                    <TabsContent value="improvements">
-                      <ImprovementList points={analysis.improvementPoints} />
-                    </TabsContent>
-                    <TabsContent value="topics">
-                      <TopicDetailList topics={analysis.topicProgress} />
-                    </TabsContent>
-                  </Tabs>
-                </CardContent>
-              </Card>
+                <div className="relative overflow-hidden rounded-2xl border border-amber-200/40 bg-[#fef3c7] p-5 dark:border-white/8 dark:bg-[#1E1B16]">
+                  <span className="absolute right-4 top-4 text-right text-[11px] font-extrabold leading-[1.4] tracking-[.08em] text-amber-700/30 uppercase dark:text-amber-200/15">
+                    평균
+                    <br />
+                    힌트
+                  </span>
+                  <div className="pt-9">
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-[52px] font-black leading-none tabular-nums tracking-[-3px] text-amber-900 dark:text-white">
+                        {analysis.averageHintCount}
+                      </span>
+                      <span className="text-base font-bold text-amber-700/30 dark:text-gray-500">
+                        회
+                      </span>
+                    </div>
+                    <p className="mt-2 text-[13px] font-semibold text-amber-800/50 dark:text-gray-400">
+                      세션당 사용량
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <aside className="space-y-6">
-              <Card className="rounded-lg border border-[#E7DDC8] bg-white py-0 shadow-sm transition-colors dark:border-white/10 dark:bg-[#24211D] dark:shadow-none">
-                <CardContent className="p-5">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold text-[#B88700]">
-                        학습 유형
-                      </p>
-                      <h2 className="mt-2 text-xl font-bold tracking-tight text-gray-950 dark:text-white">
-                        현재 패턴
-                      </h2>
-                    </div>
-                    <Brain className="size-5 shrink-0 text-[#245C7A]" />
-                  </div>
+            <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div className="overflow-hidden rounded-2xl border border-[#e8dcc8] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.03)] sm:col-span-2 dark:border-white/8 dark:bg-[#1E1B16] dark:shadow-none">
+                <div className="flex h-12 items-center justify-between border-b border-[#ede0c4] px-4 dark:border-white/8 dark:bg-[#1A1714] [background:linear-gradient(to_right,#fffbeb,#fef9ec)] dark:[background:#1A1714]">
+                  <h2 className="text-xs font-bold text-amber-900 dark:text-white">
+                    주제별 진행률
+                  </h2>
+                  <span className="rounded-full border border-amber-300/60 bg-[#fffbeb] px-2.5 py-0.5 text-[11px] font-bold text-amber-700 dark:border-amber-800/30 dark:bg-amber-900/20 dark:text-amber-300">
+                    {analysis.completedSessions}/{analysis.totalSessions}{" "}
+                    완료
+                  </span>
+                </div>
+                <div className="p-4">
+                  <TopicProgressList topics={analysis.topicProgress} />
+                </div>
+              </div>
 
-                  <dl className="mt-5 divide-y divide-[#E7DDC8] dark:divide-white/10">
-                    {styleRows.map((row) => (
-                      <div key={row.label} className="py-4 first:pt-0">
-                        <dt className="text-xs font-medium text-gray-500 dark:text-gray-400">
+              <div className="flex flex-col overflow-hidden rounded-2xl border border-[#ede0c4] bg-[#fff8e1] shadow-[0_1px_3px_rgba(0,0,0,0.03)] dark:border-white/8 dark:bg-[#1E1B16] dark:shadow-none">
+                <div className="flex h-12 items-center gap-1.5 border-b border-[#ede0c4] px-4 dark:border-white/8 dark:bg-[#1A1714]">
+                  <Target
+                    className="size-3.5 text-amber-600 dark:text-amber-400"
+                    strokeWidth={1.8}
+                  />
+                  <h2 className="text-xs font-bold uppercase tracking-widest text-amber-700 dark:text-amber-300">
+                    다음 목표
+                  </h2>
+                </div>
+                <div className="flex flex-1 flex-col items-center justify-center px-5 py-6 text-center">
+                  <p className="text-[18px] font-extrabold leading-[1.45] tracking-[-0.2px] text-amber-900 break-keep dark:text-white">
+                    {analysis.improvementPoints[0]?.title ?? "다음 학습 세션 시작하기"}
+                  </p>
+                  <div className="my-4 h-px w-full bg-[#ede0c4] dark:bg-white/8" />
+                  <p className="text-xs leading-relaxed text-[#806437] break-keep dark:text-gray-400">
+                    새 세션을 완료하면 학습 기록을 바탕으로 분석이 갱신됩니다.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-[1.6fr_1fr_1fr]">
+              <div className="overflow-hidden rounded-2xl border border-[#e8dcc8] bg-[#fdfaf3] shadow-[0_1px_3px_rgba(0,0,0,0.03)] sm:col-span-2 lg:col-span-1 dark:border-white/8 dark:bg-[#1E1B16] dark:shadow-none">
+                <Tabs defaultValue="improvements" className="gap-0">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-100 bg-white px-4 py-2 dark:border-white/10 dark:bg-[#1A1714]">
+                    <h2 className="text-xs font-bold">다음 학습 포인트</h2>
+                    <TabsList variant="line">
+                      <TabsTrigger value="improvements">개선 포인트</TabsTrigger>
+                      <TabsTrigger value="topics">주제 상세</TabsTrigger>
+                    </TabsList>
+                  </div>
+                  <TabsContent value="improvements" className="p-4">
+                    <ImprovementTimeline points={analysis.improvementPoints} />
+                  </TabsContent>
+                  <TabsContent value="topics" className="p-4">
+                    <TopicDetailList topics={analysis.topicProgress} />
+                  </TabsContent>
+                </Tabs>
+              </div>
+
+              <div className="overflow-hidden rounded-2xl border border-[#e8dcc8] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.03)] dark:border-white/8 dark:bg-[#1E1B16] dark:shadow-none">
+                <div className="flex items-center justify-between border-b border-[#f5e8cc] px-4 py-3 dark:border-white/8 dark:bg-[#1A1714]">
+                  <h2 className="text-xs font-bold text-gray-900 dark:text-white">
+                    학습 유형
+                  </h2>
+                  <Brain
+                    className="size-3.5 text-[#e8c86a] dark:text-amber-400"
+                    strokeWidth={1.8}
+                  />
+                </div>
+                <dl className="divide-y divide-[#f5e8cc] dark:divide-white/8">
+                  {styleRows.map((row) => (
+                    <div key={row.label} className="flex gap-3 px-4 py-3">
+                      <div className="my-0.5 w-[3px] shrink-0 rounded-full bg-amber-300" />
+                      <div className="min-w-0">
+                        <dt className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[#876c45] dark:text-gray-500">
                           {row.label}
                         </dt>
-                        <dd className="mt-1 text-sm font-bold text-gray-950 dark:text-white">
+                        <dd className="mb-1 text-xs font-bold text-gray-900 dark:text-white">
                           {row.value}
                         </dd>
-                        <dd className="mt-2 text-sm leading-relaxed text-gray-600 break-keep dark:text-gray-300">
+                        <dd className="text-[11px] leading-relaxed text-gray-500 break-keep dark:text-gray-400">
                           {row.description}
                         </dd>
                       </div>
-                    ))}
-                  </dl>
-                </CardContent>
-              </Card>
-
-              <Card className="rounded-lg border border-[#E7DDC8] bg-white py-0 shadow-sm transition-colors dark:border-white/10 dark:bg-[#24211D] dark:shadow-none">
-                <CardContent className="p-5">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold text-[#B88700]">
-                        힌트 사용량
-                      </p>
-                      <h2 className="mt-2 text-xl font-bold tracking-tight text-gray-950 dark:text-white">
-                        단계별 분포
-                      </h2>
                     </div>
-                    <TrendingUp className="size-5 shrink-0 text-[#236B35]" />
-                  </div>
+                  ))}
+                </dl>
+              </div>
 
+              <div className="overflow-hidden rounded-2xl border border-[#ede0c4] bg-[#fafaf8] dark:border-white/8 dark:bg-[#1E1B16]">
+                <div className="flex items-center justify-between border-b border-[#ede0c4] bg-white px-4 py-3 dark:border-white/8 dark:bg-[#1A1714]">
+                  <h2 className="text-xs font-bold text-gray-900 dark:text-white">
+                    힌트 사용량
+                  </h2>
+                  <TrendingUp
+                    className="size-3.5 text-[#e8c86a] dark:text-amber-400"
+                    strokeWidth={1.8}
+                  />
+                </div>
+                <div className="flex h-[calc(100%-41px)] flex-col divide-y divide-[#f0e4cc] px-4 dark:divide-white/8">
                   <HintUsageBars hints={analysis.hintUsage} />
-                </CardContent>
-              </Card>
-
-              <Card className="rounded-lg border border-[#E7DDC8] bg-[#2E2A22] py-0 text-white shadow-sm dark:border-white/10 dark:bg-[#24211D] dark:shadow-none">
-                <CardContent className="p-5">
-                  <Target className="size-5 text-[#FECA43]" />
-                  <p className="mt-4 text-sm font-semibold text-[#FECA43]">
-                    다음 목표
-                  </p>
-                  <p className="mt-2 text-lg font-bold leading-snug break-keep">
-                    {analysis.improvementPoints[0]?.title ??
-                      "다음 학습 세션 시작하기"}
-                  </p>
-                  <p className="mt-3 text-sm leading-relaxed text-white/70 break-keep">
-                    실제 학습 기록을 기준으로 가장 먼저 챙길 흐름을 표시합니다.
-                    새 세션을 완료하면 분석이 다시 갱신됩니다.
-                  </p>
-                </CardContent>
-              </Card>
-            </aside>
-          </div>
-        </>
-      )}
-    </section>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </section>
+    </div>
   );
 }
