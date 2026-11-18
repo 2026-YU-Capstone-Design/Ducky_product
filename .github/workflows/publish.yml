@@ -11,10 +11,16 @@ permissions:
   contents: read
   packages: write
 
+concurrency:
+  group: docker-publish-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   publish:
     name: Publish ${{ matrix.name }}
     runs-on: ubuntu-latest
+    outputs:
+      frontend_digest: ${{ matrix.name == 'frontend' && steps.build.outputs.digest || '' }}
 
     strategy:
       fail-fast: false
@@ -32,6 +38,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Record frontend version
+        if: matrix.name == 'frontend'
+        run: echo "$GITHUB_SHA" > Ducky_web/public/ducky-release.txt
+
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -43,6 +53,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and Push
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
@@ -53,3 +64,95 @@ jobs:
             ${{ matrix.image }}:sha-${{ github.sha }}
           labels: |
             org.opencontainers.image.source=https://github.com/2026-YU-Capstone-Design/Ducky_product
+
+  deploy:
+    name: Deploy frontend
+    needs: publish
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
+        with:
+          role-to-assume: ${{ vars.FRONTEND_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.FRONTEND_AWS_REGION }}
+
+      - name: EC2 프론트엔드 교체 요청
+        id: rollout
+        shell: bash
+        env:
+          INSTANCE_ID: ${{ vars.FRONTEND_INSTANCE_ID }}
+          IMAGE_DIGEST: ${{ needs.publish.outputs.frontend_digest }}
+          EC2_COMMANDS: |
+            set -eu
+            cd "${DUCKY_FRONTEND_DIR:-/opt/ducky/frontend}"
+            exec 9>.deploy.lock
+            flock -w 60 9
+
+            current=$(docker compose -p ducky-frontend ps -q frontend)
+            if [ -z "$current" ]; then
+              echo "먼저 README의 Compose 전환 절차를 진행하세요." >&2
+              exit 1
+            fi
+
+            previous=$(docker inspect -f '{{.Image}}' "$current")
+            docker pull "$FRONTEND_IMAGE" >&2
+            target=$(docker image inspect -f '{{.Id}}' "$FRONTEND_IMAGE")
+            if [ "$previous" != "$target" ]; then
+              docker image tag "$previous" ducky-frontend-rollback:previous
+              docker compose -p ducky-frontend up -d --no-deps --pull never frontend >&2
+            fi
+            test "$(docker inspect -f '{{.Image}}' ducky-frontend)" = "$target"
+            curl -fsS --retry 8 --retry-all-errors --retry-delay 2 --max-time 3 http://127.0.0.1:3000/ -o /dev/null
+
+            # GitHub 러너에서 공개 페이지와 대조할 빌드 ID.
+            docker exec ducky-frontend cat .next/BUILD_ID
+        run: |
+          main=$(git ls-remote --exit-code origin refs/heads/main | cut -f1)
+          if [[ $main != "$GITHUB_SHA" ]]; then
+            echo "main에 더 최신 커밋이 있어 이 배포를 건너뜁니다."
+            exit 0
+          fi
+          [[ $IMAGE_DIGEST =~ ^sha256:[0-9a-f]{64}$ ]]
+          export FRONTEND_IMAGE="ghcr.io/2026-yu-capstone-design/ducky-frontend@$IMAGE_DIGEST"
+          params=$(jq -n '{commands: ["export FRONTEND_IMAGE=\(env.FRONTEND_IMAGE)", env.EC2_COMMANDS], executionTimeout: ["600"]}')
+          command_id=$(aws ssm send-command --instance-ids "$INSTANCE_ID" --document-name AWS-RunShellScript \
+            --parameters "$params" --timeout-seconds 120 --query Command.CommandId --output text)
+          echo "command_id=$command_id" >> "$GITHUB_OUTPUT"
+
+      - name: EC2 배포 결과 확인
+        id: result
+        if: steps.rollout.outputs.command_id != ''
+        env:
+          INSTANCE_ID: ${{ vars.FRONTEND_INSTANCE_ID }}
+          COMMAND_ID: ${{ steps.rollout.outputs.command_id }}
+        run: |
+          echo "SSM command: $COMMAND_ID"
+          target=(--command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID")
+          until aws ssm wait command-executed "${target[@]}"; do
+            status=$(aws ssm get-command-invocation "${target[@]}" --query Status --output text)
+            case "$status" in
+              Pending|InProgress|Delayed|Cancelling) continue ;;
+              Success) break ;;
+              *) aws ssm get-command-invocation "${target[@]}" --query StandardErrorContent --output text; exit 1 ;;
+            esac
+          done
+          build_id=$(aws ssm get-command-invocation "${target[@]}" --query StandardOutputContent --output text)
+          [[ $build_id =~ ^[a-zA-Z0-9_-]+$ ]]
+          echo "build_id=$build_id" >> "$GITHUB_OUTPUT"
+
+      - name: ducklab.site 새 버전 확인
+        if: steps.rollout.outputs.command_id != ''
+        env:
+          BUILD_ID: ${{ steps.result.outputs.build_id }}
+        run: |
+          version=$(curl -fsS --retry 3 --max-time 5 "https://ducklab.site/ducky-release.txt?rev=$GITHUB_SHA")
+          status=$(curl -fsS --retry 3 --max-time 5 -o "$RUNNER_TEMP/ducky-home.html" -w '%{http_code}' https://ducklab.site/)
+          if [[ $version != "$GITHUB_SHA" || $status != 200 ]] || ! grep -Fq -- "$BUILD_ID" "$RUNNER_TEMP/ducky-home.html"; then
+            echo "::error::ducklab.site에서 새 버전을 확인하지 못했습니다. 수동 복구 절차는 Ducky_web/README.md를 확인하세요."
+            exit 1
+          fi
