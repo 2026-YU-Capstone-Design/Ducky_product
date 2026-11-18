@@ -54,29 +54,26 @@ export function ChatInput({
 
   return (
     <form
-      className="border-t border-[#E7DDC8] bg-[#FAF8F5] px-3 py-3 transition-colors dark:border-white/10 dark:bg-[#201D19] sm:px-4 lg:px-5"
+      className="border-t border-[#F0E0A8] bg-white px-3 py-3 transition-colors dark:border-[#5C4413]/40 dark:bg-[#221C0D] sm:px-4 lg:px-5"
       onSubmit={(event) => {
         event.preventDefault();
         send();
       }}
     >
       {files.length > 0 && (
-        <div className="mb-3 flex flex-wrap gap-2">
+        <div className="mb-2 flex flex-wrap gap-2 px-1">
           {files.map((file, index) => (
             <span
               key={`${file.name}-${index}`}
-              className="inline-flex max-w-full items-center gap-2 rounded-lg border border-[#E7DDC8] bg-white px-2.5 py-1.5 text-xs text-gray-700 transition-colors dark:border-white/10 dark:bg-[#24211D] dark:text-gray-300"
+              className="inline-flex max-w-full items-center gap-2 rounded-full border border-[#F0E0A8] bg-[#FFF6DC] px-2.5 py-1 text-xs text-[#5C4413] transition-colors dark:border-[#5C4413]/40 dark:bg-[#2A2310] dark:text-[#E8C97A]"
             >
-              <span className="shrink-0 font-bold text-[#B88700] dark:text-[#FECA43]">
-                세션 첨부
-              </span>
               <span className="max-w-[10rem] truncate sm:max-w-[14rem]">
                 {file.name}
               </span>
               <button
                 type="button"
                 onClick={() => removeFile(index)}
-                className="rounded text-gray-500 hover:text-gray-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#FECA43] dark:text-gray-400 dark:hover:text-white"
+                className="rounded-full text-[#8A6A28] hover:text-[#3D2E0A] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#FECA43] dark:text-[#C4A85A] dark:hover:text-white"
                 aria-label={`${file.name} 제거`}
               >
                 <X className="size-3.5" aria-hidden="true" />
@@ -86,12 +83,12 @@ export function ChatInput({
         </div>
       )}
 
-      <div className="flex items-end gap-2">
+      <div className="flex items-center gap-2 rounded-[26px] border border-[#F0E0A8] bg-[#FFFCF3] py-1.5 pr-1.5 pl-3.5 transition-colors focus-within:border-[#FECA43] dark:border-[#5C4413]/40 dark:bg-[#1F1A09]">
         <label
-          className="inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[#E7DDC8] bg-white text-gray-700 shadow-sm transition-colors hover:bg-[#FFF7E0] focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[#FECA43] dark:border-white/10 dark:bg-[#24211D] dark:text-gray-300 dark:shadow-none dark:hover:bg-[#2A251D]"
+          className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-full text-[#8A6A28] transition-colors hover:bg-[#F0E0A8]/50 hover:text-[#3D2E0A] focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[#FECA43] dark:text-[#C4A85A] dark:hover:bg-white/5 dark:hover:text-white"
           title="세션 자료 첨부"
         >
-          <Paperclip className="size-5" aria-hidden="true" />
+          <Paperclip className="size-4" aria-hidden="true" />
           <span className="sr-only">세션 자료 첨부</span>
           <input
             ref={fileInputRef}
@@ -110,8 +107,8 @@ export function ChatInput({
         <Textarea
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          placeholder="질문하거나 자료 붙이기"
-          className="min-w-0 flex-1 max-h-32 min-h-11 resize-none border-[#E7DDC8] bg-white px-4 py-3 text-sm shadow-sm focus-visible:border-[#FECA43] focus-visible:ring-[#FECA43]/30 dark:border-white/10 dark:bg-[#1D1B18] dark:text-white dark:shadow-none dark:placeholder:text-gray-500"
+          placeholder="질문하거나, 자료를 붙여 같이 물어보세요."
+          className="min-w-0 max-h-32 min-h-9 flex-1 resize-none border-0 bg-transparent px-0 py-1.5 text-sm text-[#3D2E0A] shadow-none placeholder:text-[#A8895C] focus-visible:ring-0 dark:text-[#F0E0C4] dark:placeholder:text-[#6B5526]"
           disabled={disabled}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) {
@@ -121,17 +118,6 @@ export function ChatInput({
           }}
         />
 
-        <Button
-          type="submit"
-          disabled={!canSend || disabled}
-          size="icon-lg"
-          title="전송"
-          aria-label="메시지 전송"
-          className="size-11 rounded-lg bg-[#2E2A22] text-white hover:bg-[#4A4438] dark:bg-[#FECA43] dark:text-[#2E2A22] dark:hover:bg-[#F5B522]"
-        >
-          <SendHorizontal className="size-5" aria-hidden="true" />
-        </Button>
-
         <VoiceInputButton
           disabled={disabled}
           onCancel={onVoiceCancel}
@@ -139,6 +125,17 @@ export function ChatInput({
           status={voiceStatus}
           statusLabel={voiceStatusLabel}
         />
+
+        <Button
+          type="submit"
+          disabled={!canSend || disabled}
+          size="icon"
+          title="전송"
+          aria-label="메시지 전송"
+          className="size-9 shrink-0 rounded-full bg-[#3D2E0A] text-[#FFEFC4] hover:bg-[#5C4413] disabled:bg-[#E5DCC3] disabled:text-[#A8895C] dark:bg-[#FECA43] dark:text-[#3D2E0A] dark:hover:bg-[#F5B522]"
+        >
+          <SendHorizontal className="size-4" aria-hidden="true" />
+        </Button>
       </div>
     </form>
   );
