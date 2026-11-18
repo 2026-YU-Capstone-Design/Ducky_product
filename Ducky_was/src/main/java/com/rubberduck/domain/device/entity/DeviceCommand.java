@@ -2,6 +2,8 @@ package com.rubberduck.domain.device.entity;
 
 import java.time.Instant;
 
+import com.rubberduck.domain.user.entity.User;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -34,6 +36,10 @@ public class DeviceCommand {
     @JoinColumn(name = "device_id", nullable = false)
     private Device device;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "requested_by")
+    private User requestedBy;
+
     @Column(name = "conversation_id")
     private Long conversationId;
 
@@ -57,9 +63,10 @@ public class DeviceCommand {
     @Column(name = "error_message", length = 1000)
     private String errorMessage;
 
-    public static DeviceCommand startRecording(Device device, Long conversationId) {
+    public static DeviceCommand startRecording(Device device, User user, Long conversationId) {
         DeviceCommand command = new DeviceCommand();
         command.setDevice(device);
+        command.setRequestedBy(user);
         command.setConversationId(conversationId);
         command.setCommandType(DeviceCommandType.START_RECORDING);
         command.setStatus(DeviceCommandStatus.PENDING);

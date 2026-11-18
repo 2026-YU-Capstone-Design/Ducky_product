@@ -4,9 +4,9 @@ import Image from "next/image";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import type { User } from "@/types/user";
 import { getMe } from "@/lib/api/auth";
 import { clearAccessToken, getAccessToken } from "@/lib/api/client";
-import { ensureDefaultRaspberryLinked } from "@/lib/api/devices";
 import { clearPersistedUser, persistUser } from "@/lib/auth/storage";
 import { BottomNav } from "./BottomNav";
 import { Sidebar } from "./Sidebar";
@@ -36,20 +36,20 @@ function AppLaunchSplash() {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter();
-  const [isReady, setIsReady] = useState(false);
+  const [profile, setProfile] = useState<User | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     let readyTimer: number | undefined;
     const startedAt = Date.now();
 
-    function showReadyAfterSplash() {
+    function showReadyAfterSplash(user: User) {
       const elapsed = Date.now() - startedAt;
       const remaining = Math.max(0, MIN_APP_SPLASH_MS - elapsed);
 
       readyTimer = window.setTimeout(() => {
         if (!cancelled) {
-          setIsReady(true);
+          setProfile(user);
         }
       }, remaining);
     }
@@ -68,16 +68,13 @@ export function AppShell({ children }: { children: ReactNode }) {
         }
 
         persistUser(user);
-        void ensureDefaultRaspberryLinked(user.id).catch((deviceLinkError) => {
-          console.warn("Default Raspberry link failed", deviceLinkError);
-        });
 
         if (!user.onboarded) {
           router.replace("/onboarding");
           return;
         }
 
-        showReadyAfterSplash();
+        showReadyAfterSplash(user);
       } catch {
         if (cancelled) {
           return;
@@ -99,13 +96,13 @@ export function AppShell({ children }: { children: ReactNode }) {
     };
   }, [router]);
 
-  if (!isReady) {
+  if (!profile) {
     return <AppLaunchSplash />;
   }
 
   return (
-    <div className="relative flex h-dvh overflow-hidden bg-[#FAF8F5] text-[#2E2A22] transition-colors dark:bg-[#171512] dark:text-white">
-      <Sidebar />
+    <div className="relative flex h-dvh overflow-hidden bg-[#FFFCF3] text-[#2E2A22] transition-colors dark:bg-[#16130A] dark:text-white">
+      <Sidebar user={profile} />
       <main className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overscroll-contain pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-0">
         {children}
       </main>

@@ -24,26 +24,6 @@ export interface DeviceCommandResponse {
   errorMessage: string | null;
 }
 
-export async function ensureDefaultRaspberryLinked(userId: string) {
-  const device = await apiRequest<DeviceResponse>("/api/devices", {
-    method: "POST",
-    body: {
-      serial_number: DEFAULT_RASPBERRY_SERIAL,
-      firmware_version: "raspberry-local",
-    },
-  });
-
-  await apiRequest(`/api/devices/${device.id}/link`, {
-    method: "POST",
-    body: {
-      user_id: userId,
-      role: "OWNER",
-    },
-  });
-
-  return device;
-}
-
 export function listDevices() {
   return apiRequest<DeviceResponse[]>("/api/devices", {
     method: "GET",

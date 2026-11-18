@@ -73,7 +73,7 @@ const indexingLabels: Record<LearningMaterialIndexingStatus, string> = {
 
 const indexingStyles: Record<LearningMaterialIndexingStatus, string> = {
   excluded:
-    "border-[#E1E5EA] bg-white text-gray-500 dark:border-white/10 dark:bg-[#24211D] dark:text-gray-400",
+    "border-[#E1E5EA] bg-white text-gray-500 dark:border-white/10 dark:bg-[#1E1B16] dark:text-gray-400",
   failed:
     "border-[#F2B8A2] bg-[#FFF0EA] text-[#8A3B20] dark:border-[#F2B8A2]/50 dark:bg-[#2A211D] dark:text-[#F2B8A2]",
   indexed:
@@ -95,7 +95,7 @@ function formatFileSize(size: number) {
     return `${(size / 1024 / 1024).toFixed(1)} MB`;
   }
 
-  return `${Math.max(Math.round(size / 1024), 1)} KB`;
+  return size < 1024 ? `${size} B` : `${Math.round(size / 1024)} KB`;
 }
 
 function formatDate(value?: string) {
@@ -260,13 +260,13 @@ export function MaterialLibrary() {
   }
 
   return (
-    <Card className="rounded-lg border border-[#E7DDC8] bg-white py-0 shadow-sm transition-colors dark:border-white/10 dark:bg-[#24211D] dark:shadow-none lg:col-span-2">
+    <Card className="rounded-2xl border border-amber-100/80 bg-white py-0 shadow-sm transition-colors dark:border-white/10 dark:bg-[#1E1B16] dark:shadow-none lg:col-span-2">
       <CardContent className="p-5">
         <div className="flex flex-col gap-4 border-b border-[#E7DDC8] pb-5 dark:border-white/10 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <FolderOpen className="size-5 text-[#B88700]" aria-hidden="true" />
-              <h2 className="text-lg font-bold tracking-tight text-gray-950 dark:text-white">
+              <h2 className="text-sm font-bold tracking-wide text-gray-950 dark:text-white">
                 자료 보관함
               </h2>
             </div>
@@ -306,8 +306,8 @@ export function MaterialLibrary() {
           </div>
         </div>
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-3">
-          <div className="rounded-lg border border-[#E7DDC8] bg-[#FAF8F5] p-4 dark:border-white/10 dark:bg-[#1D1B18]">
+        <div className="mt-5 grid grid-cols-1 divide-y divide-amber-100/80 overflow-hidden rounded-xl border border-amber-100/80 sm:grid-cols-3 sm:divide-x sm:divide-y-0 dark:divide-white/10 dark:border-white/10">
+          <div className="bg-amber-50/50 p-4 dark:bg-white/[0.03]">
             <Database className="size-5 text-[#245C7A]" aria-hidden="true" />
             <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
               전체 자료
@@ -316,7 +316,7 @@ export function MaterialLibrary() {
               {materials.length}
             </p>
           </div>
-          <div className="rounded-lg border border-[#E7DDC8] bg-[#FAF8F5] p-4 dark:border-white/10 dark:bg-[#1D1B18]">
+          <div className="bg-amber-50/50 p-4 dark:bg-white/[0.03]">
             <Search className="size-5 text-[#236B35]" aria-hidden="true" />
             <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
               색인 완료
@@ -325,7 +325,7 @@ export function MaterialLibrary() {
               {indexedCount}
             </p>
           </div>
-          <div className="rounded-lg border border-[#E7DDC8] bg-[#FAF8F5] p-4 dark:border-white/10 dark:bg-[#1D1B18]">
+          <div className="bg-amber-50/50 p-4 dark:bg-white/[0.03]">
             <FileText className="size-5 text-[#B88700]" aria-hidden="true" />
             <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
               저장 용량
@@ -345,7 +345,7 @@ export function MaterialLibrary() {
 
         <div
           className={cn(
-            "mt-5 rounded-lg border border-dashed border-[#D9CBAE] bg-[#FAF8F5] p-5 transition-colors dark:border-white/15 dark:bg-[#1D1B18]",
+            "mt-5 rounded-2xl border border-dashed border-amber-300 bg-amber-50/50 p-5 transition-colors dark:border-white/15 dark:bg-[#1D1B18]",
             isDragging &&
               "border-[#FECA43] bg-[#FFF7E0] dark:border-[#FECA43] dark:bg-[#2A251D]",
           )}
@@ -364,7 +364,7 @@ export function MaterialLibrary() {
           />
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 items-start gap-3">
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-white text-[#B88700] dark:bg-[#24211D] dark:text-[#FECA43]">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-white text-[#B88700] dark:bg-[#1E1B16] dark:text-[#FECA43]">
                 <UploadCloud className="size-5" aria-hidden="true" />
               </span>
               <div className="min-w-0">
@@ -387,19 +387,19 @@ export function MaterialLibrary() {
 
         <div className="mt-5 divide-y divide-[#E7DDC8] overflow-hidden rounded-lg border border-[#E7DDC8] dark:divide-white/10 dark:border-white/10">
           {isLoading ? (
-            <div className="flex min-h-32 items-center justify-center gap-2 bg-white p-4 text-sm text-gray-500 dark:bg-[#24211D] dark:text-gray-400">
+            <div className="flex min-h-32 items-center justify-center gap-2 bg-white p-4 text-sm text-gray-500 dark:bg-[#1E1B16] dark:text-gray-400">
               <Loader2 className="size-4 animate-spin" aria-hidden="true" />
               자료를 불러오는 중
             </div>
           ) : materials.length === 0 ? (
-            <div className="flex min-h-32 items-center justify-center bg-white p-4 text-center text-sm text-gray-500 break-keep dark:bg-[#24211D] dark:text-gray-400">
+            <div className="flex min-h-32 items-center justify-center bg-white p-4 text-center text-sm text-gray-500 break-keep dark:bg-[#1E1B16] dark:text-gray-400">
               아직 업로드된 자료가 없습니다.
             </div>
           ) : (
             materials.map((material) => (
               <article
                 key={material.id}
-                className="grid min-w-0 gap-4 bg-white p-4 transition-colors dark:bg-[#24211D] lg:grid-cols-[minmax(0,1fr)_13rem_2.5rem] lg:items-center"
+                className="grid min-w-0 gap-4 bg-white p-4 transition-colors dark:bg-[#1E1B16] lg:grid-cols-[minmax(0,1fr)_13rem_2.5rem] lg:items-center"
               >
                 <div className="flex min-w-0 items-start gap-3">
                   <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-[#EAF4F8] text-[#245C7A] dark:bg-[#1D252A] dark:text-[#B9D9E8]">
