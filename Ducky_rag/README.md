@@ -65,6 +65,12 @@ $env:PYTHONPATH = 'Ducky_rag'
 
 `smoke.py`는 테스트 계정을 만들고, 실제 PDF 업로드·권한 격리·검색·답변·근거 저장·실패·재시도·삭제를 검사한다. 새 테스트 계정과 일부 실패 문서는 로컬 DB에 남는다. 운영 주소를 대상으로 실행하지 않는다.
 
+### CI 자동 검증
+
+`develop`·`main` 대상 PR과 `Ducky CI` 수동 실행에서 `Document Pipeline & HTTP Integration` 작업이 실행된다. Python 문서 처리 테스트 후 Java 17로 API를 빌드하고, 처리기와 `rag-local` API를 띄워 같은 `smoke.py`를 실행한다. CI는 메모리 H2 DB와 임시 산출물 디렉터리를 사용하며 외부 AI나 AWS에 연결하지 않는다.
+
+서버 시작 실패 시 로그를 출력하고, 테스트 종료 시 실행한 서버를 정리한다. 테스트 결과 XML·JSON과 서버 로그는 `document-verification` 아티팩트로 7일간 보관한다. 이 검증은 샘플 PDF와 디버깅 노트의 기능 흐름을 확인하며, 실제 강의자료의 검색 품질이나 LLM 답변 품질을 보장하지 않는다.
+
 ## 데이터 계약
 
 - 웹 → Spring: 기존 `Authorization: Bearer ducky.…`, `POST /api/documents`, multipart `file`. 사용자 ID는 인증 principal에서만 받는다.

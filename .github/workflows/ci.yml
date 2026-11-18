@@ -74,3 +74,90 @@ jobs:
 
       - name: Build and Test
         run: ./gradlew clean build --no-daemon
+
+  documents:
+    name: Document Pipeline & HTTP Integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: Ducky_rag/requirements*.txt
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+          cache-dependency-path: |
+            Ducky_was/build.gradle
+            Ducky_was/settings.gradle
+            Ducky_was/gradle/wrapper/gradle-wrapper.properties
+
+      - name: Install document processor dependencies
+        run: python -m pip install -r Ducky_rag/requirements-test.txt
+
+      - name: Test document conversion and normalization
+        env:
+          PYTHONPATH: Ducky_rag
+        run: python -m pytest -p no:cacheprovider Ducky_rag/tests -q --junitxml=.runtime/verification/document-tests.xml
+
+      - name: Build local API
+        working-directory: Ducky_was
+        run: |
+          chmod +x gradlew
+          ./gradlew bootJar --no-daemon
+
+      - name: Verify upload, retrieval, answers and user isolation
+        timeout-minutes: 3
+        env:
+          PYTHONPATH: Ducky_rag
+        shell: bash
+        run: |
+          mkdir -p .runtime/verification
+          python -m ducky_rag.server --port 18091 > .runtime/verification/worker.log 2>&1 &
+          rag_worker_pid=$!
+          java -jar Ducky_was/build/libs/rubberduck-0.0.1-SNAPSHOT.jar \
+            --spring.profiles.active=rag-local \
+            --server.port=18080 \
+            --document.worker-url=http://127.0.0.1:18091 \
+            --document.storage-root=.runtime/verification/documents \
+            '--spring.datasource.url=jdbc:h2:mem:rag_ci;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH' \
+            > .runtime/verification/api.log 2>&1 &
+          rag_api_pid=$!
+          trap 'kill "$rag_worker_pid" "$rag_api_pid" 2>/dev/null || true; wait || true' EXIT
+          for attempt in $(seq 1 60); do
+            if ! kill -0 "$rag_worker_pid" 2>/dev/null || ! kill -0 "$rag_api_pid" 2>/dev/null; then
+              cat .runtime/verification/worker.log .runtime/verification/api.log
+              exit 1
+            fi
+            if curl -fsS http://127.0.0.1:18091/health > /dev/null 2>&1 && \
+               curl -fsS http://127.0.0.1:18080/api/health > /dev/null 2>&1; then
+              python Ducky_rag/scripts/smoke.py --base-url http://127.0.0.1:18080 --output .runtime/verification
+              exit 0
+            fi
+            sleep 1
+          done
+          cat .runtime/verification/worker.log .runtime/verification/api.log
+          echo "Local document services did not become ready within 60 seconds."
+          exit 1
+
+      - name: Upload document verification results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: document-verification
+          path: |
+            .runtime/verification/*.xml
+            .runtime/verification/*.json
+            .runtime/verification/*.log
+          if-no-files-found: ignore
+          retention-days: 7
