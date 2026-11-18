@@ -1,0 +1,35 @@
+[Unit]
+Description=Update Ducky frontend from the deployment image
+Wants=network-online.target
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/ducky/frontend
+TimeoutStartSec=10min
+# ':' leaves shell variables for Bash to expand. No separate .sh file is needed.
+ExecStart=:/usr/bin/flock -w 60 .deploy.lock /bin/bash -euc '\
+  repository=ghcr.io/2026-yu-capstone-design/ducky-frontend; \
+  export FRONTEND_IMAGE="$repository:deploy"; \
+  current=$(docker compose -p ducky-frontend ps --all -q frontend); \
+  test -n "$current"; \
+  previous=$(docker inspect -f "{{.Image}}" "$current"); \
+  docker pull "$FRONTEND_IMAGE"; \
+  export FRONTEND_IMAGE=$(docker image inspect "$FRONTEND_IMAGE" -f "{{index .RepoDigests 0}}"); \
+  [[ $FRONTEND_IMAGE == "$repository"@sha256:* ]]; \
+  target=$(docker image inspect -f "{{.Id}}" "$FRONTEND_IMAGE"); \
+  if [[ $previous != "$target" ]]; then \
+    docker image tag "$previous" ducky-frontend-rollback:previous; \
+    docker compose -p ducky-frontend up -d --no-deps --pull never frontend; \
+  fi; \
+  test "$(docker inspect -f "{{.Image}}" ducky-frontend)" = "$target"; \
+  expected=$(docker exec ducky-frontend cat public/ducky-release.txt); \
+  [[ $expected =~ ^[0-9a-f]{40}$ ]]; \
+  actual=$(curl -fsS --retry 8 --retry-all-errors --retry-delay 2 --max-time 3 http://127.0.0.1:3000/ducky-release.txt); \
+  test "$actual" = "$expected"; \
+  build_id=$(docker exec ducky-frontend cat .next/BUILD_ID); \
+  [[ $build_id =~ ^[a-zA-Z0-9_-]+$ ]]; \
+  page=$(curl -fsS --max-time 5 http://127.0.0.1:3000/); \
+  [[ $page == *"$build_id"* ]]; \
+  echo "Frontend verified: $expected ($build_id)"'
