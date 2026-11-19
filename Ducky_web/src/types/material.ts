@@ -17,6 +17,7 @@ export type LearningMaterialIndexingStatus =
   | "failed"
   | "indexed"
   | "processing"
+  | "processed"
   | "pending";
 
 export interface LearningMaterial {

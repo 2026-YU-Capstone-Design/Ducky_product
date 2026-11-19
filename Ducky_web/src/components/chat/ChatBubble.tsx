@@ -72,8 +72,13 @@ export function ChatBubble({ message }: ChatBubbleProps) {
               <summary className="cursor-pointer font-semibold">참고 문서 {message.sources.length}건</summary>
               <ul className="mt-2 space-y-3">
                 {message.sources.map((source) => (
-                  <li key={source.chunkId}>
+                  <li key={`${source.documentId}-${source.chunkId}`}>
                     <p className="font-semibold">{source.title}{source.headingPath ? ` / ${source.headingPath}` : ""}</p>
+                    <p className="mt-1 text-gray-500">
+                      문서 {source.documentId} · {source.pageNumber != null && source.pageNumber > 0
+                        ? `PDF ${source.pageNumber}쪽`
+                        : "쪽 정보 없음"}
+                    </p>
                     <p className="mt-1 whitespace-pre-wrap">{source.content}</p>
                   </li>
                 ))}
