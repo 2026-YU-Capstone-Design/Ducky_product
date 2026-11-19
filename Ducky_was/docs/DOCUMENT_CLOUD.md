@@ -1,0 +1,30 @@
+# Spring document cloud mode
+
+Default `DOCUMENT_MODE=local` retains local HTTP and synchronous DOCX/PPTX processing.
+Cloud mode supports PDF/TXT/MD/CSV/JSON and does not call the Python HTTP worker.
+
+Required explicit settings:
+- DOCUMENT_MODE=cloud
+- DOCUMENT_BUCKET: dedicated versioned document bucket
+- DOCUMENT_REGION=ap-southeast-2
+- DOCUMENT_COMPLETION_QUEUE_URL: completion queue, with DLQ/redrive configured by infrastructure owner
+- RAG_PROCESSOR_REVISION: immutable Lambda release revision
+- DOCUMENT_AWS_CREDENTIALS=instance-role (deployed) or profile + DOCUMENT_AWS_PROFILE (explicit named profile)
+- Local emulation only: DOCUMENT_AWS_CREDENTIALS=emulator + DOCUMENT_AWS_ENDPOINT=http://127.0.0.1:<port>; dummy test credentials are used. No default credential chain.
+- DOCUMENT_COMPLETION_POLL_ENABLED=false disables consumption for controlled tests.
+- Normalizer/chunker defaults match the shared Lambda v2 contract; change only with the release contract.
+
+`document_upload_attempts` commits owner/document/UUID/hash/key/size before S3 upload. Each retry writes a fresh UUID/key and reads the previous exact object version. Upload metadata is committed in a second transaction. Completion before this commit is retried, never acknowledged. A process crash between S3 upload and metadata commit needs operator reconciliation; it does not trust queue metadata as DB truth.
+
+Completion validates immutable source metadata, deterministic job hash, release, manifest and all three artifact hashes/lengths, run prefix, result document/hash/counts and canonical/Markdown correspondence. Failed conversion applies only to the current attempt. Duplicate, deleted document and older attempt deliveries cannot recreate or replace current data. Completion owns a pessimistic row lock through index persistence. Commit failure propagates to the consumer. Only successful return from its independent transaction permits SQS deletion. Errors are logged by exception class, without body, filename or source content.
+
+The index boundary is `DocumentIndexWriter.replace`, called inside the completion transaction. This branch writes the existing develop lexical index. BM25 prerequisite 0f8ecc7 remains separately owned and is not copied/merged here. The team integration must connect its index write to this boundary before `markIndexed` if BM25 persistence is added. Candidate search already queries by authenticated user, then indexed/rag-enabled documents.
+
+Existing HTTP API endpoints remain; response fields added: attemptId, sourceType, sourceSha256, sourceVersionId, sourceETag, retryAllowed. Source download URLs are not exposed. `processed` is conversion only; `indexed` is reached after validated DB index commit. Queue poison messages require the infrastructure DLQ policy. Physical S3/version cleanup is deferred: document deletion removes DB chunks and document visibility but retains attempt audit records and S3 objects. No live cleanup lifecycle is installed here.
+
+Schema: existing development configuration uses Hibernate ddl-auto=update. For managed schemas review and run `src/main/resources/db/manual/20261119_document_cloud.sql` separately, then validate. This is deliberately not an automatically activated Flyway baseline.
+
+Tests: `./gradlew test` uses H2 + S3/SQS test doubles, no credentials or network service needed. `CloudDocumentFlowTest` may use an isolated local PostgreSQL with DOCUMENT_TEST_DB_URL; fixed dummy test user/password are ducky_test/local-test-only. Never point this test at a shared/live DB because test profile creates/drops tables. An optional DOCUMENT_PRECURSOR_RESULT points to synthetic process_document JSON produced by the separately owned Lambda image; it substitutes server identity and output paths only to exercise actual result shape, without importing precursor commits. No PDF or private logs are committed.
+
+AWS SDK references: [S3](https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/migration-s3-client.html), [SQS](https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/examples-sqs-messages.html).
+Actual AWS IAM, S3 notifications/versioning, queue routing/DLQ and end-to-end Lambda remain deployment verification tasks. No LLM is involved in ingestion tests.

@@ -38,6 +38,8 @@ public class DocumentService {
     private final EmbeddingService embeddingService;
     private final SparseEmbeddingService sparseEmbeddingService;
     private final LocalDocumentStore documentStore;
+    private final CloudDocumentSettings cloudSettings;
+    private final CloudDocumentUploadService cloudUpload;
 
     @Value("${document.pipeline-enabled:false}")
     private boolean pipelineEnabled;
@@ -49,6 +51,8 @@ public class DocumentService {
         }
 
         String fileName = normalizeFileName(file.getOriginalFilename());
+        if (cloudSettings.enabled() && !fileName.toLowerCase(Locale.ROOT).endsWith(".docx")
+                && !fileName.toLowerCase(Locale.ROOT).endsWith(".pptx")) return cloudUpload.upload(user, file, fileName);
         if (pipelineEnabled && !fileName.toLowerCase(Locale.ROOT).endsWith(".docx")
                 && !fileName.toLowerCase(Locale.ROOT).endsWith(".pptx")) return enqueue(user, file, fileName);
         String text = textExtractionService.extract(file);
@@ -86,7 +90,7 @@ public class DocumentService {
     @Transactional
     public void delete(User user, Long documentId) {
         LearningDocument document = getLockedUserDocument(user, documentId);
-        try { documentStore.deleteArtifacts(document.getSourceKey()); }
+        try { if (document.getAttemptId() == null) documentStore.deleteArtifacts(document.getSourceKey()); }
         catch (IOException exception) { throw new CustomException(ErrorCode.DOCUMENT_STORAGE_UNAVAILABLE); }
         chunkRepository.deleteByDocument(document);
         documentRepository.delete(document);
@@ -97,6 +101,7 @@ public class DocumentService {
 
     @Transactional
     public DocumentResponse retry(User user, Long id) {
+        if (cloudSettings.enabled()) return cloudUpload.retry(user, id);
         var document = getLockedUserDocument(user, id);
         if (!pipelineEnabled || !"failed".equals(document.getIndexingStatus()) || document.getSourceKey() == null) {
             throw new CustomException(ErrorCode.DOCUMENT_RETRY_NOT_ALLOWED);
