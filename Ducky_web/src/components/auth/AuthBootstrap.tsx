@@ -10,17 +10,18 @@ export function AuthBootstrap() {
     let cancelled = false;
 
     async function syncUser() {
-      if (!getAccessToken()) {
+      const token = getAccessToken();
+      if (!token) {
         return;
       }
 
       try {
         const user = await getMe();
-        if (!cancelled) {
+        if (!cancelled && token === getAccessToken()) {
           persistUser(user);
         }
       } catch {
-        if (!cancelled) {
+        if (!cancelled && token === getAccessToken()) {
           clearAccessToken();
           clearPersistedUser();
         }

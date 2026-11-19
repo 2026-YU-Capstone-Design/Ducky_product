@@ -159,6 +159,12 @@ function getErrorMessage(error: unknown) {
 
 export function useChatSession({ enabled = true }: UseChatSessionOptions = {}) {
   const isLoadingRef = useRef(false);
+  const processingController = useRef<AbortController | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    processingController.current = controller;
+    return () => controller.abort();
+  }, []);
   const [activeSession, setActiveSession] =
     useState<ChatSessionSummary>(DEFAULT_SESSION);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -233,9 +239,10 @@ export function useChatSession({ enabled = true }: UseChatSessionOptions = {}) {
       const trimmedText = text.trim();
       const attachments = createAttachments(files);
 
-      if (!enabled || !activeSession.id) return;
-      if (!trimmedText && !attachments?.length) return;
-      if (status === "completed" || isThinking) return;
+      if (!enabled || !activeSession.id) return false;
+      if (!trimmedText && !attachments?.length) return false;
+      if (status === "completed" || isThinking) return false;
+      const signal = processingController.current?.signal;
 
       setIsThinking(true);
       setError(null);
@@ -243,11 +250,13 @@ export function useChatSession({ enabled = true }: UseChatSessionOptions = {}) {
       try {
         // Persist attachments and wait for indexing before asking about them.
         for (const file of files ?? []) {
+          signal?.throwIfAborted();
           setProcessingMessage(`${file.name} 문서를 처리하고 있습니다.`);
           if (file.size > 20 * 1024 * 1024) throw new Error("파일은 20MB 이하로 올려 주세요.");
-          await waitForDocument(await uploadDocument(file));
+          await waitForDocument(await uploadDocument(file), signal);
         }
         setProcessingMessage(null);
+        signal?.throwIfAborted();
         const turn = await sendChatMessage({
           conversationId: activeSession.id,
           message:
@@ -274,8 +283,10 @@ export function useChatSession({ enabled = true }: UseChatSessionOptions = {}) {
         ) {
           setStatus("completed");
         }
+        return true;
       } catch (sendError) {
         setError(getErrorMessage(sendError));
+        return false;
       } finally {
         setProcessingMessage(null);
         setIsThinking(false);

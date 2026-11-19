@@ -1,4 +1,4 @@
-const CACHE_VERSION = "ducky-pwa-v3";
+const CACHE_VERSION = "ducky-pwa-v4";
 const OFFLINE_URL = "/offline";
 const CORE_ASSETS = [
   OFFLINE_URL,
@@ -52,19 +52,17 @@ self.addEventListener("fetch", (event) => {
 
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request)
-        .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE_VERSION).then((cache) => cache.put(request, copy));
-          return response;
-        })
-        .catch(async () => {
-          const cachedResponse = await caches.match(request);
-          return cachedResponse ?? caches.match(OFFLINE_URL);
-        }),
+      fetch(request).catch(() => caches.match(OFFLINE_URL)),
     );
     return;
   }
+
+  // Only public static assets may be shared across accounts. RSC and private
+  // route responses must always reach the network.
+  if (!(requestUrl.pathname.startsWith("/_next/static/") ||
+        requestUrl.pathname.startsWith("/icons/") ||
+        requestUrl.pathname.startsWith("/images/") ||
+        CORE_ASSETS.includes(requestUrl.pathname))) return;
 
   event.respondWith(
     caches.match(request).then((cachedResponse) => {
