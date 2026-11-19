@@ -325,7 +325,7 @@ export function useChatSession({ enabled = true }: UseChatSessionOptions = {}) {
     } finally {
       setIsThinking(false);
     }
-  }, [activeSession.id, enabled, hintHistory.length, isThinking, status]);
+  }, [activeSession.id, enabled, isThinking, status]);
 
   const completeSession = useCallback(async () => {
     if (!enabled || !activeSession.id) return;
