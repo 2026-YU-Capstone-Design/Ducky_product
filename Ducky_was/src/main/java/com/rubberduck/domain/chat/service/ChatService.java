@@ -190,7 +190,7 @@ public class ChatService {
         List<Long> selectedIds = conversation.getSelectedDocumentIdsJson() == null ? null
                 : new tools.jackson.databind.ObjectMapper().readValue(conversation.getSelectedDocumentIdsJson(),
                     new tools.jackson.core.type.TypeReference<List<Long>>() {});
-        var decision = conversationRouter.decide(normalizedText, conversationHistory, selectedIds != null && !selectedIds.isEmpty());
+        var decision = conversationRouter.decide(normalizedText, conversationHistory);
         var sources = !completion && decision.needsDocuments()
                 ? documentService.search(user, decision.searchQuery(), 3, selectedIds).results()
                 : java.util.List.<com.rubberduck.domain.document.dto.DocumentSearchResult>of();
@@ -248,16 +248,16 @@ public class ChatService {
         List<Long> selectedIds = conversation.getSelectedDocumentIdsJson() == null ? null
                 : new tools.jackson.databind.ObjectMapper().readValue(conversation.getSelectedDocumentIdsJson(),
                     new tools.jackson.core.type.TypeReference<List<Long>>() {});
-        var routed = conversationRouter.decide("다음 힌트", conversationHistory, selectedIds != null && !selectedIds.isEmpty());
+        var routed = conversationRouter.decide("다음 힌트", conversationHistory);
         var sources = routed.needsDocuments()
                 ? documentService.search(user, routed.searchQuery(), 3, selectedIds).results()
                 : java.util.List.<com.rubberduck.domain.document.dto.DocumentSearchResult>of();
-        AiReply reply = routed.needsDocuments()
+        AiReply reply = routed.needsDocuments() || routed.mode() == ConversationRouter.Mode.CLARIFY
                 ? chatResponseService.generateRoutedTurn("다음 힌트", user, documentService.toPromptContext(sources), conversationHistory, null, routed)
                 : new AiReply(chatResponseService.generateHint(user, conversation, hintNumber, conversationHistory, previousHints), "hint", chatResponseService.responseMode());
         ChatMessage hintMessage = ChatMessage.create(conversation, "assistant", reply.content(), reply.type(), "system", conversation.getMessageCount() + 1);
         hintMessage.setSources(sources);
-        hintMessage.setResponseStrategy(routed.needsDocuments() && sources.isEmpty() ? "INSUFFICIENT_EVIDENCE" : "HINT");
+        hintMessage.setResponseStrategy(routed.needsDocuments() && sources.isEmpty() ? "INSUFFICIENT_EVIDENCE" : routed.mode().name());
         hintMessage.setResponseMode(reply.responseMode());
         if ("hint".equals(reply.type())) {
             hintMessage.setHintNumber(hintNumber);

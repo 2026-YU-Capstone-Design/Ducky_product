@@ -49,6 +49,44 @@ class ConversationHarnessTest extends ApiFlowTest {
         assertThat(reply.sources()).isEmpty();
     }
 
+    @Test void generalIntentAfterDocumentTurnDoesNotSearchOrDiscardStoredSelection() {
+        var user = newUser("general-switch"); Long id = session(user);
+        Long selected = document(user, "Python list policy", true);
+        document(user, "Python list other policy", true);
+        chat.sendMessage(user, id, "문서의 Python list 설명", "text", List.of(selected));
+        em.flush(); em.clear();
+        for (String question : List.of("문서와 관계없이 파이썬 리스트가 뭐야?", "Python list란?")) {
+            var reply = chat.sendMessage(user, id, question, "text").aiResponse();
+            assertThat(reply.responseStrategy()).isEqualTo("DIRECT");
+            assertThat(reply.sources()).isEmpty();
+        }
+        var resumed = chat.sendMessage(user, id, "문서의 Python list 설명", "text").aiResponse();
+        assertThat(resumed.sources()).hasSize(1);
+        assertThat(resumed.sources().get(0).documentId()).isEqualTo(selected.toString());
+    }
+
+    @Test void missingReferentStaysUnresolvedAfterClarificationsAndDoesNotConsumeHint() {
+        var user = newUser("no-referent"); Long id = session(user);
+        for (String question : List.of("이거 왜 안 돼?", "이 코드는 왜 오류가 나?", "힌트 좀 줘")) {
+            var reply = chat.sendMessage(user, id, question, "text").aiResponse();
+            assertThat(reply.responseStrategy()).as(question).isEqualTo("CLARIFY");
+            assertThat(reply.type()).isEqualTo("question");
+            assertThat(reply.sources()).isEmpty();
+        }
+        assertThat(chat.requestHint(user, id).hintMessage().responseStrategy()).isEqualTo("CLARIFY");
+        assertThat(chat.getConversation(user, id).hintCount()).isZero();
+    }
+
+    @Test void nonemptyLexicalCandidateDoesNotEstablishAnswerSupport() {
+        var user = newUser("weak-candidate"); Long id = session(user);
+        Long selected = document(user, "Quasar retries stop after seven attempts", true);
+        var reply = chat.sendMessage(user, id, "문서에서 Quasar 창시자의 생년월일은?", "text", List.of(selected)).aiResponse();
+        // Shared token retrieves a real candidate, but it contains no biographical answer.
+        assertThat(reply.sources()).isNotEmpty();
+        assertThat(reply.content()).contains("후보가 있다는 것만으로", "근거 충족 여부를 판정하지 않습니다");
+        assertThat(reply.responseMode()).isEqualTo("extractive");
+    }
+
     @Test void selectedScopeAndSourcesSurviveReloadAndFollowUp() {
         var user = newUser("scope");
         Long selected = document(user, "Quasar retries stop after seven attempts", true);

@@ -59,8 +59,9 @@ class ChatFlowTest extends ApiFlowTest {
                         .content(objectMapper.writeValueAsString(Map.of(
                                 "conversation_id", Long.parseLong(conversationId)
                         ))))
-                .andExpect(status().isServiceUnavailable())
-                .andExpect(jsonPath("$.success").value(false));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.hintMessage.type").value("question"))
+                .andExpect(jsonPath("$.data.hintMessage.responseStrategy").value("CLARIFY"));
 
         mockMvc.perform(patch("/api/chat/conversations/" + conversationId + "/end")
                         .header("Authorization", "Bearer " + accessToken))
@@ -70,7 +71,7 @@ class ChatFlowTest extends ApiFlowTest {
         mockMvc.perform(get("/api/chat/conversations/" + conversationId)
                         .header("Authorization", "Bearer " + accessToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.messageCount").value(0))
+                .andExpect(jsonPath("$.data.messageCount").value(1))
                 .andExpect(jsonPath("$.data.hintCount").value(0));
 
         mockMvc.perform(delete("/api/chat/conversations/" + conversationId)
