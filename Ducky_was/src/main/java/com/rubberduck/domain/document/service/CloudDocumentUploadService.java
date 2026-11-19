@@ -100,9 +100,7 @@ public class CloudDocumentUploadService {
                       .findLockedById(id)
                       .filter(x -> x.getUser().getId().equals(user.getId()))
                       .orElseThrow(() -> new CustomException(ErrorCode.DOCUMENT_NOT_FOUND));
-              if (!"failed".equals(d.getIndexingStatus())
-                  || d.getAttemptId() == null
-                  || d.getSourceVersionId() == null)
+              if (!DocumentRetryPolicy.allowed(d, true, false))
                 throw new CustomException(ErrorCode.DOCUMENT_RETRY_NOT_ALLOWED);
               byte[] data =
                   stores

@@ -27,6 +27,10 @@ public record DocumentResponse(
 ) {
 
     public static DocumentResponse from(LearningDocument document) {
+        return from(document,false);
+    }
+
+    public static DocumentResponse from(LearningDocument document, boolean retryAllowed) {
         return new DocumentResponse(
                 String.valueOf(document.getId()),
                 document.getTitle(),
@@ -48,8 +52,7 @@ public record DocumentResponse(
                 document.getSourceSha256(),
                 document.getSourceVersionId(),
                 document.getSourceETag(),
-                "failed".equals(document.getIndexingStatus()) && document.getSourceKey() != null
-                        && (document.getAttemptId() == null || document.getSourceVersionId() != null)
+                retryAllowed
         );
     }
 }

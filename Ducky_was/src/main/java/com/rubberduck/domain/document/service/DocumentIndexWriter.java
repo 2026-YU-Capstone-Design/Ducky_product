@@ -14,6 +14,9 @@ public class DocumentIndexWriter {
   private final SparseEmbeddingService embeddings;
 
   public void replace(LearningDocument doc, JsonNode result) {
+    DocumentResultValidator.validate(result);
+    DocumentResultValidator.require(
+        doc.getId().toString().equals(result.path("documentId").asText()));
     chunks.deleteByDocument(doc);
     int i = 0;
     for (JsonNode n : result.path("chunks")) {
