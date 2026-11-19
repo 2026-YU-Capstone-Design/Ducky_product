@@ -66,16 +66,21 @@ public class ChatResponseService {
             List<ChatMessage> conversationHistory,
             Map<String, String> learningType
     ) {
-        var decision = new ConversationRouter().decide(userText, conversationHistory,
-                documentContext != null && !documentContext.isBlank());
+        var decision = new ConversationRouter().decide(userText, conversationHistory);
         return generateRoutedTurn(userText, user, documentContext, conversationHistory, learningType, decision);
     }
 
     public AiReply generateRoutedTurn(String userText, User user, String documentContext,
             List<ChatMessage> history, Map<String, String> learningType, ConversationRouter.Decision decision) {
         if (decision.mode() == ConversationRouter.Mode.CLARIFY) {
-            return new AiReply("입력이 너무 짧아서 또는 지시 대상이 불분명해서 확인이 필요합니다. 어떤 개념이나 코드에 관한 질문인가요?", "question", "rule");
+            String question = userText != null && userText.contains("코드")
+                    ? "문제의 코드와 실제 오류 메시지를 알려 주세요."
+                    : userText != null && userText.contains("힌트")
+                        ? "어떤 문제나 개념에 대한 힌트가 필요한가요?"
+                        : "입력이 너무 짧아서 또는 지시 대상이 불분명해서 확인이 필요합니다. 어떤 개념이나 코드에 관한 질문인가요?";
+            return new AiReply(question, "question", "rule");
         }
+        if (!decision.needsDocuments()) documentContext = "";
         // Retrieval owns evidence. Missing evidence never falls through to general knowledge generation.
         if (decision.needsDocuments() && (documentContext == null || documentContext.isBlank())) {
             return new AiReply("선택한 문서 범위에서 질문을 뒷받침할 근거를 찾지 못했습니다. 확인 필요: 관련 자료와 색인 상태를 확인하거나 질문을 구체화해 주세요.", "answer", "rule");
@@ -91,7 +96,7 @@ public class ChatResponseService {
                 return new AiReply(clue, "hint", "extractive");
             }
             if (decision.needsDocuments()) {
-                return new AiReply("업로드 문서에서 찾은 관련 내용입니다.\n\n" + documentContext.substring(0, Math.min(documentContext.length(), 3200)), "answer", "extractive");
+                return new AiReply("검색 후보 발췌입니다. 후보가 있다는 것만으로 질문에 답할 근거가 충분한 것은 아닙니다. 확인 필요: 현재 발췌 모드에서는 질문에 대한 근거 충족 여부를 판정하지 않습니다.\n\n" + documentContext.substring(0, Math.min(documentContext.length(), 3000)), "answer", "extractive");
             }
             return new AiReply("확인 필요: 현재 로컬 발췌 모드는 일반 질문에 대한 LLM 답변을 생성하지 않습니다.", "answer", "extractive");
         }
@@ -155,14 +160,10 @@ public class ChatResponseService {
             List<ChatMessage> conversationHistory,
             Map<String, String> learningType
     ) {
-        return buildTurnPrompt(
-                userText,
-                user,
-                documentContext,
-                conversationHistory,
-                learningType,
-                classifyReplyMode(userText)
-        );
+        var decision = new ConversationRouter().decide(userText, conversationHistory);
+        return buildTurnPrompt(userText, user, decision.needsDocuments() ? documentContext : "",
+                conversationHistory, learningType,
+                decision.mode() == ConversationRouter.Mode.HINT ? ReplyMode.RUBBER_DUCK : ReplyMode.DIRECT_ANSWER);
     }
 
     String buildHintPrompt(
@@ -251,11 +252,6 @@ public class ChatResponseService {
                 %s
                 """.formatted(modeInstruction, formatStyleSummary(style),
                     formatConversationHistory(conversationHistory), blankToNone(documentContext), blankToNone(userText));
-    }
-
-    private ReplyMode classifyReplyMode(String text) {
-        return new ConversationRouter().decide(text, List.of(), false).mode() == ConversationRouter.Mode.HINT
-                ? ReplyMode.RUBBER_DUCK : ReplyMode.DIRECT_ANSWER;
     }
 
     LearningStyleContext resolveLearningStyle(User user, Map<String, String> learningType) {
