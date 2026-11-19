@@ -11,7 +11,8 @@ public record MessageResponse(
         Integer hintLevel,
         Integer hintNumber,
         java.util.List<com.rubberduck.domain.document.dto.DocumentSearchResult> sources,
-        String responseMode
+        String responseMode,
+        String responseStrategy
 ) {
 
     public static MessageResponse from(ChatMessage message) {
@@ -24,7 +25,8 @@ public record MessageResponse(
                 message.getHintLevel(),
                 message.getHintNumber(),
                 message.getSources(),
-                message.getResponseMode()
+                message.getResponseMode(),
+                message.getResponseStrategy()
         );
     }
 }

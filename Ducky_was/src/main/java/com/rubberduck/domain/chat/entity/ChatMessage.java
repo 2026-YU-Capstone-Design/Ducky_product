@@ -48,6 +48,9 @@ public class ChatMessage {
     @Column(length = 30)
     private String responseMode;
 
+    @Column(length = 40)
+    private String responseStrategy;
+
     public void setSources(List<DocumentSearchResult> sources) {
         sourcesJson = new ObjectMapper().writeValueAsString(sources);
     }
