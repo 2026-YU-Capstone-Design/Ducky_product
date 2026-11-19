@@ -31,6 +31,8 @@ import {
   listDocuments,
   uploadDocument,
   retryDocument,
+  isDocumentProcessing,
+  isDocumentSearchable,
 } from "@/lib/api/documents";
 import { cn } from "@/lib/utils";
 import type {
@@ -70,10 +72,12 @@ const indexingLabels: Record<LearningMaterialIndexingStatus, string> = {
   failed: "색인 실패",
   indexed: "색인 완료",
   processing: "문서 처리 중",
+  processed: "변환 완료 · 색인 대기",
   pending: "색인 대기",
 };
 
 const indexingStyles: Record<LearningMaterialIndexingStatus, string> = {
+  processed: "border-[#C9D7E2] bg-[#EAF4F8] text-[#245C7A]",
   processing: "border-[#C9D7E2] bg-[#EAF4F8] text-[#245C7A]",
   excluded:
     "border-[#E1E5EA] bg-white text-gray-500 dark:border-white/10 dark:bg-[#1E1B16] dark:text-gray-400",
@@ -130,7 +134,7 @@ export function MaterialLibrary() {
   const [retryingIds, setRetryingIds] = useState<Set<string>>(new Set());
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const hasPending = materials.some((material) =>
-    material.indexingStatus === "pending" || material.indexingStatus === "processing");
+    isDocumentProcessing(material.indexingStatus));
 
   useEffect(() => {
     if (!hasPending) return;
@@ -150,6 +154,7 @@ export function MaterialLibrary() {
   }, [hasPending]);
 
   async function retryMaterial(id: string) {
+    setErrorMessage(null);
     setRetryingIds((ids) => new Set(ids).add(id));
     try {
       const updated = await retryDocument(id);
@@ -163,7 +168,7 @@ export function MaterialLibrary() {
 
   const indexedCount = useMemo(
     () =>
-      materials.filter((material) => material.indexingStatus === "indexed")
+      materials.filter(isDocumentSearchable)
         .length,
     [materials],
   );
@@ -345,7 +350,7 @@ export function MaterialLibrary() {
           <div className="bg-amber-50/50 p-4 dark:bg-white/[0.03]">
             <Search className="size-5 text-[#236B35]" aria-hidden="true" />
             <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
-              색인 완료
+              검색 가능
             </p>
             <p className="mt-1 text-2xl font-bold text-gray-950 dark:text-white">
               {indexedCount}
@@ -480,9 +485,15 @@ export function MaterialLibrary() {
                   >
                     {indexingLabels[material.indexingStatus]}
                   </Badge>
+                  <span className="text-xs text-gray-500" role="status">
+                    {isDocumentSearchable(material) ? "검색 가능" : "검색 불가"}
+                  </span>
                   {material.indexingStatus === "failed" && (
-                    <Button size="sm" variant="outline" disabled={retryingIds.has(material.id)}
+                    <Button size="sm" variant="outline" disabled={retryingIds.has(material.id) || material.retryAllowed === false}
                       onClick={() => void retryMaterial(material.id)}>다시 처리</Button>
+                  )}
+                  {material.indexingStatus === "failed" && material.retryAllowed === false && (
+                    <span className="text-xs text-gray-500">재처리에 필요한 원본 정보를 확인해야 합니다.</span>
                   )}
                   <label
                     className="flex items-center gap-2 text-xs font-bold text-gray-600 dark:text-gray-300"

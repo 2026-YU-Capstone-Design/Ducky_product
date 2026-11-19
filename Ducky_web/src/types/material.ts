@@ -17,6 +17,7 @@ export type LearningMaterialIndexingStatus =
   | "failed"
   | "indexed"
   | "processing"
+  | "processed"
   | "pending";
 
 export interface LearningMaterial {
@@ -35,6 +36,12 @@ export interface LearningMaterial {
   processingWarnings?: string | null;
   chunkCount?: number | null;
   processingSeconds?: number | null;
+  attemptId?: string | null;
+  sourceType?: string | null;
+  sourceSha256?: string | null;
+  sourceVersionId?: string | null;
+  sourceETag?: string | null;
+  retryAllowed?: boolean;
 }
 
 export interface MaterialSourceSummary {

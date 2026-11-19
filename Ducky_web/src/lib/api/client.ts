@@ -3,6 +3,7 @@ const API_BASE_URL =
   "http://localhost:8080";
 
 export const ACCESS_TOKEN_STORAGE_KEY = "ducky_access_token";
+export const AUTH_CHANGE_EVENT = "ducky:auth-change";
 
 interface ApiResponse<T> {
   success: boolean;
@@ -39,6 +40,7 @@ export function setAccessToken(accessToken: string) {
   }
 
   window.localStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, accessToken);
+  window.dispatchEvent(new Event(AUTH_CHANGE_EVENT));
 }
 
 export function clearAccessToken() {
@@ -47,6 +49,7 @@ export function clearAccessToken() {
   }
 
   window.localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
+  window.dispatchEvent(new Event(AUTH_CHANGE_EVENT));
 }
 
 async function parseResponse<T>(response: Response): Promise<T> {
@@ -92,11 +95,10 @@ export async function apiRequest<T>(
     headers.set("Content-Type", "application/json");
   }
 
+  const token = options.auth ? getAccessToken() : null;
   if (options.auth) {
-    const token = getAccessToken();
-    if (token) {
-      headers.set("Authorization", `Bearer ${token}`);
-    }
+    if (!token) throw new ApiError("로그인이 필요합니다.", 401);
+    headers.set("Authorization", `Bearer ${token}`);
   }
 
   const requestBody: BodyInit | undefined =
@@ -110,7 +112,12 @@ export async function apiRequest<T>(
     ...options,
     headers,
     body: requestBody,
+    ...(options.auth ? { cache: "no-store" as const } : {}),
   });
 
-  return parseResponse<T>(response);
+  const result = await parseResponse<T>(response);
+  if (options.auth && token !== getAccessToken()) {
+    throw new ApiError("계정이 변경되었습니다. 다시 요청해 주세요.", 401);
+  }
+  return result;
 }
