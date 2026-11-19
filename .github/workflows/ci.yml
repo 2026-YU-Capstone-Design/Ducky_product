@@ -68,6 +68,22 @@ jobs:
     name: Backend Build & Test
     runs-on: ubuntu-latest
 
+    services:
+      schema-postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: ducky_release_schema_test
+          POSTGRES_USER: ducky_schema_test
+          POSTGRES_PASSWORD: local-schema-test-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ducky_schema_test -d ducky_release_schema_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+
+    env:
+      RELEASE_SCHEMA_TEST_DB_URL: jdbc:postgresql://127.0.0.1:5432/ducky_release_schema_test
+
     defaults:
       run:
         working-directory: Ducky_was
@@ -89,6 +105,9 @@ jobs:
 
       - name: Grant Gradle permission
         run: chmod +x gradlew
+
+      - name: Deployment Compose configuration (no containers started)
+        run: python3 -m unittest discover -s tests -p 'test_compose_configuration.py' -v
 
       - name: Build and Test
         run: ./gradlew clean build --no-daemon

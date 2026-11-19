@@ -14,6 +14,15 @@ Required explicit settings:
 - DOCUMENT_COMPLETION_POLL_ENABLED=false disables consumption for controlled tests.
 - Normalizer/chunker defaults match the shared Lambda v2 contract; change only with the release contract.
 
+The deployment Compose file explicitly forwards the required cloud settings and the
+completion-poll switch. Its default remains `DOCUMENT_MODE=local`; cloud mode requires
+all verified values above and `DOCUMENT_AWS_CREDENTIALS=instance-role`. Copy only the
+settings template from `.env.example`, supply secrets through the existing secret
+channel, and validate interpolation with `docker compose --env-file .env config --quiet`
+before a separately authorized deployment. A host `.env` alone does not inject arbitrary
+variables into a container. Named-profile or emulator use needs a separate local setup;
+the deployment Compose does not mount developer AWS profiles or forward emulator endpoints.
+
 `document_upload_attempts` commits owner/document/UUID/hash/key/size before S3 upload. Each retry writes a fresh UUID/key and reads the previous exact object version. Upload metadata is committed in a second transaction. Completion before this commit is retried, never acknowledged. A process crash between S3 upload and metadata commit needs operator reconciliation; it does not trust queue metadata as DB truth.
 
 Completion validates immutable source metadata, deterministic job hash, release, manifest and all three artifact hashes/lengths, run prefix, result document/hash/counts and canonical/Markdown correspondence. Failed conversion applies only to the current attempt. Duplicate, deleted document and older attempt deliveries cannot recreate or replace current data. Completion owns a pessimistic row lock through index persistence. Commit failure propagates to the consumer. Only successful return from its independent transaction permits SQS deletion. Errors are logged by exception class, without body, filename or source content.
@@ -22,7 +31,19 @@ The index boundary is `DocumentIndexWriter.replace`, called inside the completio
 
 Existing HTTP API endpoints remain; response fields added: attemptId, sourceType, sourceSha256, sourceVersionId, sourceETag, retryAllowed. Source download URLs are not exposed. `processed` is conversion only; `indexed` is reached after validated DB index commit. Queue poison messages require the infrastructure DLQ policy. Physical S3/version cleanup is deferred: document deletion removes DB chunks and document visibility but retains attempt audit records and S3 objects. No live cleanup lifecycle is installed here.
 
-Schema: existing development configuration uses Hibernate ddl-auto=update. For managed schemas review and run `src/main/resources/db/manual/20261119_document_cloud.sql` separately, then validate. This is deliberately not an automatically activated Flyway baseline.
+Schema: existing development configuration uses Hibernate ddl-auto=update. For existing
+managed schemas review and run `src/main/resources/db/manual/20261119_document_cloud.sql`,
+then `src/main/resources/db/manual/20261120_conversation_harness.sql`, before switching
+to validate. The second script adds the nullable conversation selection and response
+strategy columns without changing existing rows. Both scripts are repeatable. These are
+manual migrations, not an automatically activated Flyway baseline or a fresh-schema installer.
+
+`ManualReleaseSchemaTest` checks legacy-row preservation, repeat application and Hibernate
+schema validation on H2 locally and on disposable PostgreSQL 17 in CI. Its optional
+`RELEASE_SCHEMA_TEST_DB_URL` accepts only a loopback URL for `ducky_release_schema_test`
+with fixed synthetic credentials: this test creates/drops its own schema and must never
+target a shared database. The Compose configuration tests render synthetic inputs only;
+they do not start containers or call AWS/OpenAI.
 
 Tests: `./gradlew test` uses H2 + S3/SQS test doubles, no credentials or network service needed. `CloudDocumentFlowTest` may use an isolated local PostgreSQL with DOCUMENT_TEST_DB_URL; fixed dummy test user/password are ducky_test/local-test-only. Never point this test at a shared/live DB because test profile creates/drops tables. An optional DOCUMENT_PRECURSOR_RESULT points to synthetic process_document JSON produced by the separately owned Lambda image; it substitutes server identity and output paths only to exercise actual result shape, without importing precursor commits. No PDF or private logs are committed.
 

@@ -34,7 +34,10 @@ INSUFFICIENT_EVIDENCE / COMPLETION이다. 기존 저장 메시지 및 별도 완
 근거 부족 답변은 힌트 카운트를 증가시키지 않는다.
 
 추가 nullable DB 컬럼은 `conversations.selected_document_ids_json` (text),
-`messages.response_strategy` (varchar(40))이다. 기존 ddl-auto 설정을 따르며 운영 DDL은 별도 확인한다.
+`messages.response_strategy` (varchar(40))이다. 기존 관리 스키마에는
+`src/main/resources/db/manual/20261120_conversation_harness.sql`을 검토 후 적용한다.
+문서 cloud 스키마도 필요한 경우 문서용 수동 SQL을 먼저 적용하고, 두 스크립트와
+실제 기존 스키마를 대조한 뒤 JPA_DDL_AUTO=validate로 전환한다. 자동 실행하지 않는다.
 저장된 구형 출처 JSON 및 삭제 문서의 과거 출처는 그대로 유지한다.
 
 ## 검증 범위
