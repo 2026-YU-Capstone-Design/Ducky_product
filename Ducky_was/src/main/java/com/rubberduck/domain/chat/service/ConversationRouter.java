@@ -11,8 +11,13 @@ public class ConversationRouter {
     public enum Mode { DIRECT, HINT, DOCUMENT, CLARIFY }
     public record Decision(Mode mode, boolean needsDocuments, String searchQuery, int hintNumber) {}
 
-    // Document selection is an authorization/search scope, never an intent signal.
     public Decision decide(String text, List<ChatMessage> history) {
+        return decide(text, history, false);
+    }
+
+    // Only a selection supplied in this request provides explicit document context.
+    // Persisted search scope must never be passed as this flag.
+    public Decision decide(String text, List<ChatMessage> history, boolean explicitDocumentContext) {
         String value = text == null ? "" : text.trim().toLowerCase(Locale.ROOT);
         String compact = value.replaceAll("\\s+", "");
         ChatMessage last = history.stream().filter(m -> "assistant".equals(m.getSender()))
@@ -28,7 +33,7 @@ public class ConversationRouter {
                 || contains(compact, "자료말고일반", "문서말고일반", "일반지식으로", "일반적인질문");
         if (!general && followUp && last != null && "hint".equals(last.getMessageType())
                 && !contains(value, "정답", "답을", "직접", "answer")) hint = true;
-        boolean document = !general && (contains(value, "문서", "자료", "강의", "업로드", "pdf", "document")
+        boolean document = !general && (explicitDocumentContext || contains(value, "문서", "자료", "강의", "업로드", "pdf", "document")
                 || (followUp && last != null && ("DOCUMENT".equals(last.getResponseStrategy())
                     || "INSUFFICIENT_EVIDENCE".equals(last.getResponseStrategy()) || !last.getSources().isEmpty())));
         int number = 1 + (int) history.stream().filter(m -> "hint".equals(m.getMessageType())).count();

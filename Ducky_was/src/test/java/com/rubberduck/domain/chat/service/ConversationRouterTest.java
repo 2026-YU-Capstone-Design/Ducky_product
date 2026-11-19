@@ -10,6 +10,15 @@ import tools.jackson.databind.ObjectMapper;
 class ConversationRouterTest {
     final ConversationRouter router = new ConversationRouter();
 
+    @Test void currentRequestDocumentContextSupportsKeywordFreeQuestionButNotPermanentForcing() {
+        assertThat(router.decide("Quasar retry budget", List.of(), true).mode()).isEqualTo(ConversationRouter.Mode.DOCUMENT);
+        assertThat(router.decide("파이썬 리스트가 뭐야?", List.of()).mode()).isEqualTo(ConversationRouter.Mode.DIRECT);
+        assertThat(router.decide("문서와 관계없이 파이썬 리스트가 뭐야?", List.of(), true).mode()).isEqualTo(ConversationRouter.Mode.DIRECT);
+        assertThat(router.decide("힌트 좀 줘", List.of(), true).mode()).isEqualTo(ConversationRouter.Mode.CLARIFY);
+        assertThat(router.decide("Quasar retry budget 힌트만 줘", List.of(), true).mode()).isEqualTo(ConversationRouter.Mode.HINT);
+        assertThat(router.decide("Quasar retry budget 힌트만 줘", List.of(), true).needsDocuments()).isTrue();
+    }
+
     @Test void documentScopeDoesNotOverrideExplicitOrIndependentGeneralIntent() {
         var previousQuestion = ChatMessage.create(null, "user", "문서의 큐를 설명해", "question", "text", 1);
         var previousAnswer = ChatMessage.create(null, "assistant", "문서 발췌", "answer", "system", 2);

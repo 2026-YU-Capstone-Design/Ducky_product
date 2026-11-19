@@ -79,7 +79,7 @@ public class ChatService {
             documentIds.forEach(id -> documentService.get(user, id));
             conversation.setSelectedDocumentIdsJson(new tools.jackson.databind.ObjectMapper().writeValueAsString(documentIds));
         }
-        return appendUserTurn(user, conversation, messageText, inputType, null);
+        return appendUserTurn(user, conversation, messageText, inputType, null, documentIds != null && !documentIds.isEmpty());
     }
 
     @Transactional
@@ -102,7 +102,7 @@ public class ChatService {
             conversation.setDevice(device);
         }
 
-        return appendUserTurn(user, conversation, messageText, inputType == null ? "voice" : inputType, learningType);
+        return appendUserTurn(user, conversation, messageText, inputType == null ? "voice" : inputType, learningType, false);
     }
 
     @Transactional
@@ -167,7 +167,8 @@ public class ChatService {
             Conversation conversation,
             String messageText,
             String inputType,
-            Map<String, String> learningType
+            Map<String, String> learningType,
+            boolean explicitDocumentContext
     ) {
         String normalizedText = requireText(messageText);
         boolean completion = isCompletionText(normalizedText);
@@ -190,7 +191,7 @@ public class ChatService {
         List<Long> selectedIds = conversation.getSelectedDocumentIdsJson() == null ? null
                 : new tools.jackson.databind.ObjectMapper().readValue(conversation.getSelectedDocumentIdsJson(),
                     new tools.jackson.core.type.TypeReference<List<Long>>() {});
-        var decision = conversationRouter.decide(normalizedText, conversationHistory);
+        var decision = conversationRouter.decide(normalizedText, conversationHistory, explicitDocumentContext);
         var sources = !completion && decision.needsDocuments()
                 ? documentService.search(user, decision.searchQuery(), 3, selectedIds).results()
                 : java.util.List.<com.rubberduck.domain.document.dto.DocumentSearchResult>of();

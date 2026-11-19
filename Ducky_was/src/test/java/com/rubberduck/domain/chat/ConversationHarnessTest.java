@@ -1,7 +1,11 @@
 package com.rubberduck.domain.chat;
 
 import static org.assertj.core.api.Assertions.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -16,6 +20,10 @@ import com.rubberduck.domain.user.entity.User;
 import com.rubberduck.global.exception.CustomException;
 import com.rubberduck.support.ApiFlowTest;
 import jakarta.persistence.EntityManager;
+import org.springframework.http.MediaType;
+import com.rubberduck.domain.auth.service.AuthTokenService;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 @SpringBootTest(properties = "chat.response-mode=extractive")
 @ActiveProfiles("test")
@@ -26,6 +34,87 @@ class ConversationHarnessTest extends ApiFlowTest {
     @Autowired DocumentChunkRepository chunks;
     @Autowired SparseEmbeddingService embeddings;
     @Autowired EntityManager em;
+    @Autowired AuthTokenService tokens;
+
+    JsonNode apiSend(User user, Long id, String text, List<Long> selection) throws Exception {
+        Map<String, Object> payload = new HashMap<>(Map.of("conversationId", id, "message", text, "inputType", "text"));
+        if (selection != null) payload.put("documentIds", selection);
+        var result = mockMvc.perform(post("/api/chat/messages")
+                .header("Authorization", "Bearer " + tokens.issue(user.getId()))
+                .contentType(MediaType.APPLICATION_JSON).content(new ObjectMapper().writeValueAsString(payload)))
+                .andExpect(status().isOk()).andReturn();
+        return new ObjectMapper().readTree(result.getResponse().getContentAsString()).path("data").path("aiResponse");
+    }
+
+    @Test void explicitRequestSelectionRoutesKeywordFreeQuestionThenOmittedScopeDoesNotForceDocuments() throws Exception {
+        var user = newUser("attachment-api"); Long id = session(user);
+        Long selected = document(user, "Quasar retry budget is seven attempts", true);
+        document(user, "Quasar retry budget is forty attempts", true);
+        var first = apiSend(user, id, "Quasar retry budget", List.of(selected));
+        assertThat(first.path("responseStrategy").asText()).isEqualTo("DOCUMENT");
+        assertThat(first.path("sources").size()).isEqualTo(1);
+        assertThat(first.path("sources").get(0).path("documentId").asText()).isEqualTo(selected.toString());
+        em.flush(); em.clear();
+        var general = apiSend(user, id, "파이썬 리스트가 뭐야?", null);
+        assertThat(general.path("responseStrategy").asText()).isEqualTo("DIRECT");
+        assertThat(general.path("sources").size()).isZero();
+        em.flush(); em.clear();
+        var resumed = apiSend(user, id, "문서의 Quasar retry budget 다시 설명해", null);
+        assertThat(resumed.path("responseStrategy").asText()).isEqualTo("DOCUMENT");
+        assertThat(resumed.path("sources").size()).isEqualTo(1);
+        assertThat(resumed.path("sources").get(0).path("documentId").asText()).isEqualTo(selected.toString());
+        em.flush(); em.clear();
+        mockMvc.perform(get("/api/chat/conversations/" + id).header("Authorization", "Bearer " + tokens.issue(user.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.messages[1].responseStrategy").value("DOCUMENT"))
+                .andExpect(jsonPath("$.data.messages[1].sources[0].documentId").value(selected.toString()))
+                .andExpect(jsonPath("$.data.messages[3].responseStrategy").value("DIRECT"))
+                .andExpect(jsonPath("$.data.messages[3].sources").isEmpty())
+                .andExpect(jsonPath("$.data.messages[5].sources[0].documentId").value(selected.toString()));
+    }
+
+    @Test void explicitWeakCandidateAndEmptySelectionKeepEvidenceAndScopeSemantics() throws Exception {
+        var user = newUser("weak-selection-api"); Long id = session(user);
+        Long selected = document(user, "Quasar retry budget is seven attempts", true);
+        var weak = apiSend(user, id, "Quasar founder birth date", List.of(selected));
+        assertThat(weak.path("responseStrategy").asText()).isEqualTo("DOCUMENT");
+        assertThat(weak.path("sources").size()).isEqualTo(1);
+        assertThat(weak.path("content").asText()).contains("근거 충족 여부를 판정하지 않습니다");
+        em.flush(); em.clear();
+        var restored = chat.getConversation(user, id).messages().get(1);
+        assertThat(restored.content()).isEqualTo(weak.path("content").asText());
+        assertThat(restored.responseStrategy()).isEqualTo("DOCUMENT");
+        assertThat(restored.sources().get(0).documentId()).isEqualTo(selected.toString());
+        var cleared = apiSend(user, id, "Quasar retry budget", List.of());
+        assertThat(cleared.path("responseStrategy").asText()).isEqualTo("DIRECT");
+        assertThat(cleared.path("sources").size()).isZero();
+        em.flush(); em.clear();
+        var absent = apiSend(user, id, "문서의 Quasar retry budget", null);
+        assertThat(absent.path("responseStrategy").asText()).isEqualTo("INSUFFICIENT_EVIDENCE");
+        assertThat(absent.path("sources").size()).isZero();
+    }
+
+    @Test void explicitSelectionDoesNotSupplyMissingHintTargetOrMakePendingDocumentSearchable() throws Exception {
+        var user = newUser("selection-clarify-api"); Long id = session(user);
+        Long selected = document(user, "Quasar retry budget", false);
+        var unclear = apiSend(user, id, "힌트 좀 줘", List.of(selected));
+        assertThat(unclear.path("responseStrategy").asText()).isEqualTo("CLARIFY");
+        assertThat(unclear.path("sources").size()).isZero();
+        assertThat(chat.getConversation(user, id).hintCount()).isZero();
+        var pending = apiSend(user, id, "Quasar retry budget", List.of(selected));
+        assertThat(pending.path("responseStrategy").asText()).isEqualTo("INSUFFICIENT_EVIDENCE");
+        assertThat(pending.path("responseMode").asText()).isEqualTo("rule");
+    }
+
+    @Test void unauthorizedExplicitDocumentSelectionIsRejectedBeforeRouting() throws Exception {
+        var user = newUser("selection-owner-api"); Long id = session(user);
+        Long foreign = document(newUser("selection-foreign-api"), "Quasar secret", true);
+        mockMvc.perform(post("/api/chat/messages").header("Authorization", "Bearer " + tokens.issue(user.getId()))
+                .contentType(MediaType.APPLICATION_JSON).content(new ObjectMapper().writeValueAsString(Map.of(
+                        "conversationId", id, "message", "Quasar retry budget", "documentIds", List.of(foreign)))))
+                .andExpect(status().isNotFound()).andExpect(jsonPath("$.success").value(false));
+        assertThat(chat.getConversation(user, id).messageCount()).isZero();
+    }
 
     Long session(User user) {
         return Long.valueOf(chat.startConversation(user, null, null, "test", "test").id());
