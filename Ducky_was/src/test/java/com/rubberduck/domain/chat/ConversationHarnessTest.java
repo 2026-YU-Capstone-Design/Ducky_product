@@ -8,6 +8,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 import com.rubberduck.domain.chat.service.ChatService;
+import com.rubberduck.domain.chat.dto.MessageResponse;
 import com.rubberduck.domain.document.entity.*;
 import com.rubberduck.domain.document.repository.*;
 import com.rubberduck.domain.document.service.SparseEmbeddingService;
@@ -85,6 +86,47 @@ class ConversationHarnessTest extends ApiFlowTest {
         assertThat(reply.sources()).isNotEmpty();
         assertThat(reply.content()).contains("후보가 있다는 것만으로", "근거 충족 여부를 판정하지 않습니다");
         assertThat(reply.responseMode()).isEqualTo("extractive");
+        assertThat(reply.responseStrategy()).isEqualTo("DOCUMENT"); // Intent, not a supported-answer verdict.
+        assertThat(reply.sources().get(0).documentId()).isEqualTo(selected.toString());
+        assertThat(reply.content()).startsWith("검색 후보 발췌입니다.").contains("Quasar retries stop after seven attempts");
+        assertRestored(user, id, reply);
+    }
+
+    @Test void weakCandidatesRemainUnverifiedInChatHintsAndHintEndpointAfterReload() {
+        var user = newUser("weak-hint"); Long id = session(user);
+        Long selected = document(user, "Zephyr API retries are enabled after network failure", true);
+        document(user, "Zephyr API authentication secret expires after 300 seconds", true);
+        // The selected retry policy cannot establish authentication-token expiry.
+        var reply = chat.sendMessage(user, id, "문서의 Zephyr API 인증 토큰 만료 시간 힌트만 줘", "text", List.of(selected)).aiResponse();
+        assertUnverifiedHint(reply, selected, 1);
+        assertRestored(user, id, reply);
+        var next = chat.requestHint(user, id).hintMessage();
+        assertUnverifiedHint(next, selected, 2);
+        assertRestored(user, id, next);
+        assertThat(chat.getConversation(user, id).hintCount()).isEqualTo(2);
+    }
+
+    private void assertUnverifiedHint(MessageResponse reply, Long selected, int number) {
+        assertThat(reply.sources()).hasSize(1);
+        assertThat(reply.sources().get(0).documentId()).isEqualTo(selected.toString());
+        assertThat(reply.content()).contains("후보가 있다는 것만으로", "근거 충족 여부를 판정하지 않습니다")
+                .doesNotContain("300 seconds", "authentication secret");
+        assertThat(reply.responseStrategy()).isEqualTo("HINT");
+        assertThat(reply.responseMode()).isEqualTo("extractive");
+        assertThat(reply.type()).isEqualTo("hint");
+        assertThat(reply.hintNumber()).isEqualTo(number);
+    }
+
+    private void assertRestored(User user, Long id, MessageResponse expected) {
+        em.flush(); em.clear();
+        var restored = chat.getConversation(user, id).messages().stream()
+                .filter(message -> expected.id().equals(message.id())).findFirst().orElseThrow();
+        assertThat(restored.content()).isEqualTo(expected.content());
+        assertThat(restored.sources()).isEqualTo(expected.sources());
+        assertThat(restored.responseStrategy()).isEqualTo(expected.responseStrategy());
+        assertThat(restored.responseMode()).isEqualTo(expected.responseMode());
+        assertThat(restored.type()).isEqualTo(expected.type());
+        assertThat(restored.hintNumber()).isEqualTo(expected.hintNumber());
     }
 
     @Test void selectedScopeAndSourcesSurviveReloadAndFollowUp() {

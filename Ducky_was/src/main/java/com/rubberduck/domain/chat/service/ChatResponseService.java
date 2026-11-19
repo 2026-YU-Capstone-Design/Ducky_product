@@ -19,6 +19,8 @@ import com.rubberduck.global.exception.ErrorCode;
 @Service
 public class ChatResponseService {
 
+    private static final String UNVERIFIED_DOCUMENT_NOTICE = "후보가 있다는 것만으로 질문에 답할 근거가 충분한 것은 아닙니다. 확인 필요: 현재 발췌 모드에서는 질문에 대한 근거 충족 여부를 판정하지 않습니다.";
+
     public record AiReply(String content, String type, String responseMode) {
         public AiReply(String content, String type) { this(content, type, "llm"); }
     }
@@ -93,10 +95,12 @@ public class ChatResponseService {
                     case 2 -> "앞서 확인한 차이가 처음 나타나는 단계의 입력과 상태는 무엇인가요?";
                     default -> "그 단계의 조건을 하나만 바꿔 실행하면 결과가 어떻게 달라지나요?";
                 };
-                return new AiReply(clue, "hint", "extractive");
+                return new AiReply(decision.needsDocuments() ? UNVERIFIED_DOCUMENT_NOTICE + "\n\n" + clue : clue,
+                        "hint", "extractive");
             }
             if (decision.needsDocuments()) {
-                return new AiReply("검색 후보 발췌입니다. 후보가 있다는 것만으로 질문에 답할 근거가 충분한 것은 아닙니다. 확인 필요: 현재 발췌 모드에서는 질문에 대한 근거 충족 여부를 판정하지 않습니다.\n\n" + documentContext.substring(0, Math.min(documentContext.length(), 3000)), "answer", "extractive");
+                return new AiReply("검색 후보 발췌입니다. " + UNVERIFIED_DOCUMENT_NOTICE + "\n\n"
+                        + documentContext.substring(0, Math.min(documentContext.length(), 3000)), "answer", "extractive");
             }
             return new AiReply("확인 필요: 현재 로컬 발췌 모드는 일반 질문에 대한 LLM 답변을 생성하지 않습니다.", "answer", "extractive");
         }
