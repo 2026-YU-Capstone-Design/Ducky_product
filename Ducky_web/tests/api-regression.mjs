@@ -146,4 +146,3 @@ test('service worker bypasses API and RSC while offline navigation uses only gen
   assert.equal(await result, 'offline-page');
   assert.deepEqual(matches, ['/offline']);
 });
-
