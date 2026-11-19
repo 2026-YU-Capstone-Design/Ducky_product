@@ -55,6 +55,7 @@ server:
   port: 8080
 
 document:
+  retrieval-mode: ${DOCUMENT_RETRIEVAL_MODE:lexical}
   pipeline-enabled: ${DOCUMENT_PIPELINE_ENABLED:false}
   worker-url: ${RAG_WORKER_URL:http://127.0.0.1:8091}
   worker-token: ${RAG_WORKER_TOKEN:}

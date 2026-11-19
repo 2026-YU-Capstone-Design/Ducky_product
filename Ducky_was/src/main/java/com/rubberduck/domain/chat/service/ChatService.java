@@ -178,7 +178,7 @@ public class ChatService {
         conversation.increaseMessageCount();
 
         var sources = completion ? java.util.List.<com.rubberduck.domain.document.dto.DocumentSearchResult>of()
-                : documentService.searchResults(user, normalizedText, 3);
+                : documentService.expandContext(user, documentService.searchResults(user, normalizedText, 3));
         String documentContext = documentService.toPromptContext(sources);
         AiReply aiReply = completion
                 ? new AiReply(chatResponseService.generateCompletionFeedback(user, conversation, conversationHistory), "feedback", chatResponseService.responseMode())

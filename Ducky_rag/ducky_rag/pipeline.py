@@ -6,9 +6,9 @@ import re
 import time
 
 import pymupdf
-import pymupdf4llm
-
-from .normalization import finalize_markdown, build_canonical_blocks, split_large_text
+from .normalization import finalize_markdown, build_canonical_blocks
+from .pdf_layout import extract_pages, locate_pages
+from .chunking import build_chunks, CHUNKER_VERSION
 
 SCHEMA_VERSION = "ducky-document-v1"
 MAX_BYTES = 20 * 1024 * 1024
@@ -29,6 +29,7 @@ def process_document(data: bytes, document_id: str, source_type: str) -> dict:
     source_type = source_type.lower()
     warnings = []
     page_count = None
+    pdf_pages = []
     if source_type == "pdf":
         if not data.startswith(b"%PDF-"):
             raise ProcessingError("INVALID_PDF")
@@ -47,9 +48,8 @@ def process_document(data: bytes, document_id: str, source_type: str) -> dict:
             if image_count:
                 warnings.append("IMAGES_NOT_ENRICHED")
             # Extract text first; image content needs a separate OCR path.
-            pages = pymupdf4llm.to_markdown(document, page_chunks=True,
-                                           write_images=False, force_text=True)
-            body = "\n\n".join(p["text"] for p in pages)
+            pdf_pages = extract_pages(document)
+            body = "\n\n".join(p["markdown"] for p in pdf_pages)
     elif source_type in {"txt", "md", "csv", "json"}:
         try:
             body = data.decode("utf-8-sig")
@@ -61,28 +61,10 @@ def process_document(data: bytes, document_id: str, source_type: str) -> dict:
         source_key=f"raw/{document_id}/source.{source_type}",
         source_type=source_type)
     blocks, report = build_canonical_blocks(markdown, doc_id=document_id,
-        markdown_key=f"processed/{document_id}/document.md")
-    chunks = []
-    for index, block in enumerate(blocks):
-        if not block["searchable"]:
-            continue
-        # Keep table facts and display equations intact; preserve code whitespace.
-        parts = ([block["text"]] if block["type"] in {"table_row", "math"}
-                 else split_large_text(block["text"], max_len=1400))
-        for part_index, text in enumerate(parts):
-            if not text.strip():
-                continue
-            heading = " > ".join(block["heading_path"])
-            chunks.append({
-                "blockId": block["block_id"],
-                "chunkKey": f'{block["block_id"]}:{part_index}',
-                "content": text,
-                "headingPath": heading,
-                "blockType": block["type"],
-                "previousBlockId": blocks[index - 1]["block_id"] if index else None,
-                "nextBlockId": blocks[index + 1]["block_id"] if index + 1 < len(blocks) else None,
-                "textForEmbedding": f"{heading}\n{text}".strip(),
-            })
+        markdown_key=f"processed/{document_id}/document.md",
+        pdf_pages=locate_pages(markdown, body, pdf_pages) if pdf_pages else None)
+    report["chunker_version"] = CHUNKER_VERSION
+    chunks = build_chunks(blocks, source_type)
     if not chunks:
         raise ProcessingError("NO_SEARCHABLE_TEXT")
     if len(chunks) > MAX_CHUNKS:

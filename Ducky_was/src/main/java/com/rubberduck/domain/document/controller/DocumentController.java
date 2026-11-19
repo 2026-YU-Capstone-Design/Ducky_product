@@ -69,6 +69,6 @@ public class DocumentController {
             @AuthenticationPrincipal User user,
             @RequestBody DocumentSearchRequest request
     ) {
-        return ApiResponse.ok(documentService.search(user, request.query(), request.limit(), request.documentIds()));
+        return ApiResponse.ok(documentService.search(user, request.query(), request.limit(), request.documentIds(), request.retrievalMode()));
     }
 }
