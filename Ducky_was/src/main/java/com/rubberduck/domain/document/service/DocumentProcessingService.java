@@ -79,6 +79,7 @@ public class DocumentProcessingService {
                     || result.path("chunks").size() > 10000) {
                 throw new IllegalStateException("INVALID_PROCESSING_RESULT");
             }
+            DocumentResultValidator.validate(result);
             transaction.executeWithoutResult(status -> documents.findLockedById(id).ifPresent(doc -> {
                 if (!job.token().equals(doc.getProcessingToken()) || !"processing".equals(doc.getIndexingStatus())) return;
                 try {

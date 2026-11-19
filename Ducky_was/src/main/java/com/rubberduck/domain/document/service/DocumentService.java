@@ -77,13 +77,13 @@ public class DocumentService {
         }
 
         document.markIndexed();
-        return DocumentResponse.from(documentRepository.save(document));
+        return response(documentRepository.save(document));
     }
 
     @Transactional(readOnly = true)
     public List<DocumentResponse> list(User user) {
         return documentRepository.findByUserOrderByCreatedAtDesc(user).stream()
-                .map(DocumentResponse::from)
+                .map(this::response)
                 .toList();
     }
 
@@ -97,20 +97,24 @@ public class DocumentService {
     }
 
     @Transactional(readOnly = true)
-    public DocumentResponse get(User user, Long id) { return DocumentResponse.from(getUserDocument(user, id)); }
+    public DocumentResponse get(User user, Long id) { return response(getUserDocument(user, id)); }
 
     @Transactional
     public DocumentResponse retry(User user, Long id) {
         if (cloudSettings.enabled()) return cloudUpload.retry(user, id);
         var document = getLockedUserDocument(user, id);
-        if (!pipelineEnabled || !"failed".equals(document.getIndexingStatus()) || document.getSourceKey() == null) {
+        if (!DocumentRetryPolicy.allowed(document, false, pipelineEnabled)) {
             throw new CustomException(ErrorCode.DOCUMENT_RETRY_NOT_ALLOWED);
         }
         document.setIndexingStatus("pending");
         document.setStatus("queued");
         document.setProcessingError(null);
         document.setProcessingToken(null);
-        return DocumentResponse.from(document);
+        return response(document);
+    }
+
+    private DocumentResponse response(LearningDocument document) {
+        return DocumentResponse.from(document, DocumentRetryPolicy.allowed(document, cloudSettings.enabled(), pipelineEnabled));
     }
 
     private DocumentResponse enqueue(User user, MultipartFile file, String fileName) {
@@ -126,7 +130,7 @@ public class DocumentService {
         try {
             document.setSourceKey(documentStore.putSource(user.getId(), document.getId(), file.getBytes()));
         } catch (IOException exception) { throw new CustomException(ErrorCode.DOCUMENT_STORAGE_UNAVAILABLE); }
-        return DocumentResponse.from(document);
+        return response(document);
     }
 
     @Transactional(readOnly = true)

@@ -76,6 +76,7 @@ class DocumentProcessingTest extends ApiFlowTest {
         when(worker.process(eq(id), eq("txt"), any())).thenReturn(result(id + 100));
         processing.process(id);
         assertThat(service.get(owner, id).processingError()).isEqualTo("INVALID_PROCESSING_RESULT");
+        assertThat(service.get(owner, id).retryAllowed()).isTrue();
         assertThat(service.searchResults(owner, "Quasar", 3)).isEmpty();
         assertThat(service.retry(owner, id).indexingStatus()).isEqualTo("pending");
         when(worker.process(eq(id), eq("txt"), any())).thenReturn(result(id));
@@ -95,6 +96,28 @@ class DocumentProcessingTest extends ApiFlowTest {
         processing.process(id);
         assertThat(documents.findById(id)).isEmpty();
         assertThat(service.searchResults(owner, "Quasar", 3)).isEmpty();
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings={"missingBlock","duplicateCanonical","contentNumber","embeddingNull"})
+    void invalidHttpResultNeverBecomesSearchableAndValidRetryStillWorks(String mutation) throws Exception {
+        var owner=newUser("httpSemantic");
+        Long id=Long.valueOf(service.upload(owner,new MockMultipartFile("file","local.txt","text/plain",data)).id());
+        var bad=(tools.jackson.databind.node.ObjectNode)result(id);
+        var chunk=(tools.jackson.databind.node.ObjectNode)bad.path("chunks").get(0);
+        switch(mutation){
+          case "missingBlock" -> chunk.put("blockId","missing");
+          case "duplicateCanonical" -> ((tools.jackson.databind.node.ArrayNode)bad.path("canonicalBlocks")).add(bad.path("canonicalBlocks").get(0).deepCopy());
+          case "contentNumber" -> chunk.put("content",42);
+          case "embeddingNull" -> chunk.putNull("textForEmbedding");
+        }
+        when(worker.process(eq(id),eq("txt"),any())).thenReturn(bad);
+        processing.process(id);
+        assertThat(service.get(owner,id).indexingStatus()).isEqualTo("failed");
+        assertThat(service.get(owner,id).processingError()).isEqualTo("INVALID_PROCESSING_RESULT");
+        assertThat(service.searchResults(owner,"Quasar",5)).isEmpty();
+        service.retry(owner,id);when(worker.process(eq(id),eq("txt"),any())).thenReturn(result(id));processing.process(id);
+        assertThat(service.get(owner,id).indexingStatus()).isEqualTo("indexed");
     }
 
     @Test

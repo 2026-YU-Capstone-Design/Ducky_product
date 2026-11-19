@@ -28,3 +28,11 @@ Tests: `./gradlew test` uses H2 + S3/SQS test doubles, no credentials or network
 
 AWS SDK references: [S3](https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/migration-s3-client.html), [SQS](https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/examples-sqs-messages.html).
 Actual AWS IAM, S3 notifications/versioning, queue routing/DLQ and end-to-end Lambda remain deployment verification tasks. No LLM is involved in ingestion tests.
+
+## Semantic validation follow-up
+
+`DocumentResultValidator` is shared by HTTP processing and the cloud index boundary. Canonical IDs must be nonempty strings, unique within the document, and owned by the result document ID. Each chunk primary ID must exist; an optional blockIds list must be nonempty, contain distinct existing string IDs and start with the primary ID. A chunk's optional pageNumber must agree with source.page on every referenced block. A page is optional when canonical sources have no page (legacy and non-PDF); a present page must be an integer within bounds. Multiple split chunks may reference the same canonical block.
+
+Content is a required nonblank string; textForEmbedding may be absent for legacy results (fallback to content), but when present must be a nonblank string. Required result fields are checked without string/number coercion. Writer validation runs before deleting prior chunks. The retry API and retryAllowed now share execution-mode checks, including disabled local pipeline and local rows viewed in cloud mode.
+
+The opt-in cross-language tests use DOCUMENT_LAMBDA_SNAPSHOT (read-only owner snapshot) and DOCUMENT_LAMBDA_IMAGE (pin an existing local image digest). The Python helper uses `DocumentWorker.handle` with native S3/SQS test doubles under Docker `--network none`, creates both manifest/jobId and all artifact bytes, then passes those unchanged to the actual Java completion transaction. Synthetic long TXT covers repeated split-block references and synthetic two-page PDF covers persisted page provenance. Result JSON, hashes and Python version are stored only under excluded build/cross-language-*.json. This is local emulation, not AWS verification, and does not import owner source into the Git diff.

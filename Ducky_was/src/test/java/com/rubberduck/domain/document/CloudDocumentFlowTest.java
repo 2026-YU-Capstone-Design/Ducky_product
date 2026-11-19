@@ -293,6 +293,382 @@ class CloudDocumentFlowTest extends ApiFlowTest {
     assertThat(service.searchResults(owner, "Quasar", 5)).isEmpty();
   }
 
+  ObjectNode result(Fixture f) {
+    return (ObjectNode)
+        mapper.readTree(
+            objects.get(f.manifest().path("artifacts").path("result").path("key").asText()));
+  }
+
+  // Deliberately rehash every changed object, manifest and queue reference: semantic validation
+  // must reject it.
+  void repack(Fixture f, ObjectNode result) {
+    var artifacts = (ObjectNode) f.manifest().path("artifacts");
+    StringBuilder canonical = new StringBuilder();
+    result
+        .path("canonicalBlocks")
+        .forEach(b -> canonical.append(mapper.writeValueAsString(b)).append('\n'));
+    artifacts.set(
+        "canonical",
+        ref(
+            artifacts.path("canonical").path("key").asText(),
+            canonical.toString().getBytes(StandardCharsets.UTF_8)));
+    artifacts.set(
+        "markdown",
+        ref(
+            artifacts.path("markdown").path("key").asText(),
+            result.path("markdown").asText().getBytes(StandardCharsets.UTF_8)));
+    artifacts.set(
+        "result",
+        ref(artifacts.path("result").path("key").asText(), mapper.writeValueAsBytes(result)));
+    f.manifest().put("chunkCount", result.path("chunks").size());
+    f.manifest().set("pageCount", result.path("pageCount"));
+    f.manifest().set("processingSeconds", result.path("processingSeconds"));
+    f.manifest().set("warnings", result.path("warnings"));
+    refresh(f);
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "missingBlock",
+        "duplicateCanonical",
+        "duplicateRefs",
+        "conflictingPrimary",
+        "listMissingBlock",
+        "wrongPage",
+        "mixedPages",
+        "contentNull",
+        "contentNumber",
+        "contentObject",
+        "contentArray",
+        "contentMissing",
+        "embeddingNull",
+        "embeddingNumber",
+        "embeddingObject",
+        "embeddingArray",
+        "refsString",
+        "refsNull",
+        "refNumber",
+        "primaryNull",
+        "canonicalIdNumber",
+        "documentIdNumber",
+        "durationString",
+        "warningsNumber",
+        "headingNumber",
+        "pageString",
+        "canonicalPageString"
+      })
+  void rejectsRehashedSemanticCounterexamples(String mutation) {
+    var owner = newUser("semantic");
+    var f = fixture(owner);
+    var result = result(f);
+    var chunk = (ObjectNode) result.path("chunks").get(0);
+    var blocks = (tools.jackson.databind.node.ArrayNode) result.path("canonicalBlocks");
+    var block = (ObjectNode) blocks.get(0);
+    String id = chunk.path("blockId").asText();
+    switch (mutation) {
+      case "missingBlock" -> chunk.put("blockId", "does-not-exist");
+      case "duplicateCanonical" -> blocks.add(block.deepCopy());
+      case "duplicateRefs" -> chunk.set("blockIds", mapper.valueToTree(List.of(id, id)));
+      case "conflictingPrimary" -> {
+        var another = block.deepCopy();
+        another.put("block_id", "another");
+        blocks.add(another);
+        chunk.set("blockIds", mapper.valueToTree(List.of("another", id)));
+      }
+      case "listMissingBlock" ->
+          chunk.set("blockIds", mapper.valueToTree(List.of(id, "does-not-exist")));
+      case "wrongPage" -> {
+        ((ObjectNode) block.path("source")).put("page", 1);
+        chunk.put("pageNumber", 2);
+      }
+      case "mixedPages" -> {
+        ((ObjectNode) block.path("source")).put("page", 1);
+        var another = block.deepCopy();
+        another.put("block_id", "another");
+        ((ObjectNode) another.path("source")).put("page", 2);
+        blocks.add(another);
+        chunk.set("blockIds", mapper.valueToTree(List.of(id, "another")));
+        chunk.put("pageNumber", 1);
+      }
+      case "contentNull" -> chunk.putNull("content");
+      case "contentNumber" -> chunk.put("content", 42);
+      case "contentObject" -> chunk.set("content", mapper.createObjectNode());
+      case "contentArray" -> chunk.set("content", mapper.createArrayNode());
+      case "contentMissing" -> chunk.remove("content");
+      case "embeddingNull" -> chunk.putNull("textForEmbedding");
+      case "embeddingNumber" -> chunk.put("textForEmbedding", 42);
+      case "embeddingObject" -> chunk.set("textForEmbedding", mapper.createObjectNode());
+      case "embeddingArray" -> chunk.set("textForEmbedding", mapper.createArrayNode());
+      case "refsString" -> chunk.put("blockIds", id);
+      case "refsNull" -> chunk.putNull("blockIds");
+      case "refNumber" -> chunk.set("blockIds", mapper.valueToTree(List.of(1)));
+      case "primaryNull" -> chunk.putNull("blockId");
+      case "canonicalIdNumber" -> block.put("block_id", 1);
+      case "documentIdNumber" -> result.put("documentId", f.id());
+      case "durationString" -> result.put("processingSeconds", "0.1");
+      case "warningsNumber" -> result.set("warnings", mapper.valueToTree(List.of(42)));
+      case "headingNumber" -> chunk.put("headingPath", 42);
+      case "pageString" -> {
+        ((ObjectNode) block.path("source")).put("page", 1);
+        chunk.put("pageNumber", "1");
+      }
+      case "canonicalPageString" -> {
+        ((ObjectNode) block.path("source")).put("page", "1");
+        chunk.put("pageNumber", 1);
+      }
+    }
+    repack(f, result);
+    assertThatThrownBy(() -> completion.complete(f.message().toString()))
+        .isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> completion.complete(f.message().toString()))
+        .isInstanceOf(IllegalArgumentException.class);
+    assertThat(service.get(owner, f.id()).indexingStatus()).isEqualTo("pending");
+    assertThat(documents.findById(f.id()).orElseThrow().getCompletedJobId()).isNull();
+    assertThat(service.searchResults(owner, "Quasar", 5)).isEmpty();
+  }
+
+  @Test
+  void allowsLegacyAbsentPageAndMultipleSplitChunksSharingOneBlock() {
+    var owner = newUser("split");
+    var f = fixture(owner);
+    var result = result(f);
+    var chunks = (tools.jackson.databind.node.ArrayNode) result.path("chunks");
+    var split = chunks.get(0).deepCopy();
+    chunks.add(split);
+    repack(f, result);
+    completion.complete(f.message().toString());
+    assertThat(service.get(owner, f.id()).indexingStatus()).isEqualTo("indexed");
+    assertThat(service.get(owner, f.id()).chunkCount()).isEqualTo(2);
+  }
+
+  @Test
+  void rejectsPoisonRedeliveryWithoutReplacingExistingIndex() {
+    var owner = newUser("prior");
+    var f = fixture(owner);
+    completion.complete(f.message().toString());
+    var before = service.searchResults(owner, "Quasar", 5);
+    var result = result(f);
+    ((ObjectNode) result.path("chunks").get(0)).put("blockId", "missing");
+    repack(f, result);
+    assertThatThrownBy(() -> completion.complete(f.message().toString()))
+        .isInstanceOf(IllegalArgumentException.class);
+    assertThat(service.get(owner, f.id()).indexingStatus()).isEqualTo("indexed");
+    assertThat(service.searchResults(owner, "Quasar", 5)).isEqualTo(before);
+  }
+
+  @Test
+  void retryCapabilityRejectsLegacyLocalRowsInCloudMode() {
+    var owner = newUser("legacyRetry");
+    var doc =
+        com.rubberduck.domain.document.entity.LearningDocument.create(
+            owner, "legacy", "old.txt", "text/plain", 5, "note");
+    doc.setSourceKey("local/old/source.txt");
+    doc.markFailed("PROCESSOR_UNAVAILABLE");
+    doc = documents.save(doc);
+    final Long id = doc.getId();
+    assertThat(service.get(owner, id).retryAllowed()).isFalse();
+    assertThat(
+            service.list(owner).stream()
+                .filter(r -> r.id().equals(id.toString()))
+                .findFirst()
+                .orElseThrow()
+                .retryAllowed())
+        .isFalse();
+    assertThatThrownBy(() -> service.retry(owner, id))
+        .isInstanceOf(com.rubberduck.global.exception.CustomException.class)
+        .extracting("errorCode")
+        .isEqualTo(com.rubberduck.global.exception.ErrorCode.DOCUMENT_RETRY_NOT_ALLOWED);
+  }
+
+  @Test
+  void indexBoundaryValidatesBeforeReplacingPriorChunks() {
+    var owner = newUser("boundary");
+    var f = fixture(owner);
+    completion.complete(f.message().toString());
+    var before = service.searchResults(owner, "Quasar", 5);
+    var bad = result(f);
+    ((ObjectNode) bad.path("chunks").get(0)).put("textForEmbedding", 42);
+    var tx =
+        new org.springframework.transaction.support.TransactionTemplate(
+            context.getBean(org.springframework.transaction.PlatformTransactionManager.class));
+    assertThatThrownBy(
+            () ->
+                tx.executeWithoutResult(
+                    s -> indexWriter.replace(documents.findLockedById(f.id()).orElseThrow(), bad)))
+        .isInstanceOf(IllegalArgumentException.class);
+    assertThat(service.get(owner, f.id()).indexingStatus()).isEqualTo("indexed");
+    assertThat(service.searchResults(owner, "Quasar", 5)).isEqualTo(before);
+  }
+
+  @Test
+  void actualConsumerKeepsRehashedPoisonUnackedThenAcceptsCorrectedDelivery() throws Exception {
+    var owner = newUser("ack");
+    var f = fixture(owner);
+    var valid = result(f);
+    var bad = valid.deepCopy();
+    ((ObjectNode) bad.path("chunks").get(0)).put("content", 42);
+    repack(f, bad);
+    var sqs = mock(software.amazon.awssdk.services.sqs.SqsClient.class);
+    var s3 = mock(software.amazon.awssdk.services.s3.S3Client.class);
+    var settings = context.getBean(CloudDocumentSettings.class);
+    var constructor =
+        AwsDocumentAdapter.class.getDeclaredConstructor(
+            software.amazon.awssdk.services.s3.S3Client.class,
+            software.amazon.awssdk.services.sqs.SqsClient.class,
+            CloudDocumentSettings.class,
+            DocumentCompletionService.class);
+    var adapter =
+        org.springframework.beans.BeanUtils.instantiateClass(
+            constructor, s3, sqs, settings, completion);
+    when(sqs.receiveMessage(any(java.util.function.Consumer.class)))
+        .thenAnswer(
+            call ->
+                software.amazon.awssdk.services.sqs.model.ReceiveMessageResponse.builder()
+                    .messages(
+                        software.amazon.awssdk.services.sqs.model.Message.builder()
+                            .body(f.message().toString())
+                            .receiptHandle("synthetic-receipt")
+                            .build())
+                    .build());
+    adapter.poll();
+    adapter.poll();
+    verify(sqs, never()).deleteMessage(any(java.util.function.Consumer.class));
+    assertThat(service.get(owner, f.id()).indexingStatus()).isEqualTo("pending");
+    repack(f, valid);
+    adapter.poll();
+    verify(sqs, times(1)).deleteMessage(any(java.util.function.Consumer.class));
+    assertThat(service.get(owner, f.id()).indexingStatus()).isEqualTo("indexed");
+  }
+
+  JsonNode pythonFixture(Map<String, Object> input) throws Exception {
+    String snapshot = System.getenv("DOCUMENT_LAMBDA_SNAPSHOT");
+    String image = System.getenv("DOCUMENT_LAMBDA_IMAGE");
+    assertThat(image).isNotBlank();
+    var command =
+        List.of(
+            "docker",
+            "run",
+            "--rm",
+            "--network",
+            "none",
+            "-i",
+            "-v",
+            snapshot + ":/owner:ro",
+            "-e",
+            "PYTHONPATH=/owner/Ducky_rag",
+            "-e",
+            "DOCUMENT_FIXTURE_INPUT="
+                + Base64.getEncoder().encodeToString(mapper.writeValueAsBytes(input)),
+            "--entrypoint",
+            "python",
+            image,
+            "-");
+    var process = new ProcessBuilder(command).redirectErrorStream(true).start();
+    var bytes =
+        java.util.concurrent.CompletableFuture.supplyAsync(
+            () -> {
+              try {
+                return process.getInputStream().readAllBytes();
+              } catch (java.io.IOException e) {
+                throw new java.io.UncheckedIOException(e);
+              }
+            });
+    try (var stdin = process.getOutputStream()) {
+      stdin.write(
+          java.nio.file.Files.readAllBytes(
+              java.nio.file.Path.of("src/test/python/produce_lambda_fixture.py")));
+    }
+    if (!process.waitFor(120, java.util.concurrent.TimeUnit.SECONDS)) {
+      process.destroyForcibly();
+      throw new IllegalStateException("PYTHON_FIXTURE_TIMEOUT");
+    }
+    String output =
+        new String(bytes.get(10, java.util.concurrent.TimeUnit.SECONDS), StandardCharsets.UTF_8);
+    assertThat(process.exitValue())
+        .describedAs("Python fixture exit; details remain in excluded build directory")
+        .isZero();
+    return mapper.readTree(
+        output.lines().filter(line -> line.startsWith("{")).reduce((a, b) -> b).orElseThrow());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"txt", "pdf"})
+  @org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable(
+      named = "DOCUMENT_LAMBDA_SNAPSHOT",
+      matches = ".+")
+  void consumesActualPythonManifestJobAndArtifactsWithoutRewriting(String type) throws Exception {
+    var sourceOutput = pythonFixture(Map.of("action", "source", "type", type));
+    byte[] data = Base64.getDecoder().decode(sourceOutput.path("source").asText());
+    var owner = newUser("crosslanguage");
+    Long id =
+        Long.valueOf(
+            service
+                .upload(
+                    owner,
+                    new MockMultipartFile(
+                        "file", "synthetic." + type, "application/octet-stream", data))
+                .id());
+    var d = documents.findById(id).orElseThrow();
+    var output =
+        pythonFixture(
+            Map.of(
+                "action",
+                "process",
+                "sourceBytes",
+                Base64.getEncoder().encodeToString(data),
+                "revision",
+                d.getProcessorRevision(),
+                "source",
+                Map.of(
+                    "bucket",
+                    d.getSourceBucket(),
+                    "key",
+                    d.getSourceKey(),
+                    "versionId",
+                    d.getSourceVersionId(),
+                    "eTag",
+                    d.getSourceETag(),
+                    "size",
+                    d.getFileSize())));
+    output
+        .path("objects")
+        .properties()
+        .forEach(
+            entry ->
+                objects.put(entry.getKey(), Base64.getDecoder().decode(entry.getValue().asText())));
+    String body = output.path("completion").asText();
+    completion.complete(body);
+    completion.complete(body);
+    assertThat(service.get(owner, id).indexingStatus()).isEqualTo("indexed");
+    assertThat(service.get(owner, id).chunkCount()).isGreaterThan(1);
+    assertThat(service.searchResults(owner, "Quasar retry", 5)).isNotEmpty();
+    new org.springframework.transaction.support.TransactionTemplate(
+            context.getBean(org.springframework.transaction.PlatformTransactionManager.class))
+        .executeWithoutResult(
+            status -> {
+              var persisted = context.getBean(DocumentChunkRepository.class).findByDocument(d);
+              if (type.equals("pdf")) {
+                assertThat(
+                        persisted.stream()
+                            .map(
+                                c ->
+                                    mapper
+                                        .readTree(c.getProvenanceJson())
+                                        .path("pageNumber")
+                                        .asInt())
+                            .toList())
+                    .contains(1, 2);
+              } else {
+                assertThat(persisted.stream().map(c -> c.getBlockId()).distinct().count())
+                    .isEqualTo(1);
+              }
+            });
+    assertThat(output.path("duplicateReused").asBoolean()).isTrue();
+    java.nio.file.Files.writeString(
+        java.nio.file.Path.of("build/cross-language-" + type + ".json"), output.toString());
+  }
+
   @Test
   void latePriorAttemptCannotOverrideRetry() {
     var owner = newUser("retry");
@@ -305,6 +681,7 @@ class CloudDocumentFlowTest extends ApiFlowTest {
     refresh(old);
     completion.complete(old.message().toString());
     assertThat(service.get(owner, old.id()).indexingStatus()).isEqualTo("failed");
+    assertThat(service.get(owner, old.id()).retryAllowed()).isTrue();
     var retried = service.retry(owner, old.id());
     assertThat(retried.attemptId()).isNotEqualTo(old.message().path("attemptId").asText());
     assertThat(attempts.findById(retried.attemptId())).isPresent();

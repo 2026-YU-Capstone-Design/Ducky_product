@@ -42,7 +42,12 @@ public class DocumentCompletionValidator {
     require(c.path("jobId").asText().matches("[0-9a-f]{64}"));
     String attempt = c.path("attemptId").asText();
     require(UUID.fromString(attempt).toString().equals(attempt));
-    require(List.of("processed", "failed").contains(c.path("status").asText()));
+    require(
+        c.path("status").isString()
+            && List.of("processed", "failed").contains(c.path("status").asText()));
+    for (String field : List.of("schemaVersion", "jobId", "attemptId", "processorRevision"))
+      require(c.path(field).isString());
+    require(c.path("source").isObject() && c.path("manifest").isObject());
   }
 
   public JsonNode validate(JsonNode c, LearningDocument d, DocumentCloudStore store) {
@@ -128,7 +133,9 @@ public class DocumentCompletionValidator {
     require(
         settings.normalizer().equals(m.path("normalizerVersion").asText())
             && settings.chunker().equals(m.path("chunkerVersion").asText()));
-    require(m.path("sourceSequencer").asText().matches("[0-9A-Fa-f]+"));
+    require(
+        m.path("sourceSequencer").isString()
+            && m.path("sourceSequencer").asText().matches("[0-9A-Fa-f]+"));
     if ("failed".equals(m.path("status").asText())) {
       require(
           m.path("errorCode").asText().matches("[A-Z_]{1,60}")
@@ -191,6 +198,7 @@ public class DocumentCompletionValidator {
               .concat("document.md")
               .equals(block.path("source").path("markdown_key").asText()));
     }
+    DocumentResultValidator.validate(result);
     return result;
   }
 
