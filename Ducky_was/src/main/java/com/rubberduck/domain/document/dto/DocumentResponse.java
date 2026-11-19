@@ -17,7 +17,13 @@ public record DocumentResponse(
         String processingError,
         String processingWarnings,
         Integer chunkCount,
-        Double processingSeconds
+        Double processingSeconds,
+        String attemptId,
+        String sourceType,
+        String sourceSha256,
+        String sourceVersionId,
+        String sourceETag,
+        boolean retryAllowed
 ) {
 
     public static DocumentResponse from(LearningDocument document) {
@@ -36,7 +42,14 @@ public record DocumentResponse(
                 document.getProcessingError(),
                 document.getProcessingWarnings(),
                 document.getChunkCount(),
-                document.getProcessingSeconds()
+                document.getProcessingSeconds(),
+                document.getAttemptId(),
+                document.getSourceType(),
+                document.getSourceSha256(),
+                document.getSourceVersionId(),
+                document.getSourceETag(),
+                "failed".equals(document.getIndexingStatus()) && document.getSourceKey() != null
+                        && (document.getAttemptId() == null || document.getSourceVersionId() != null)
         );
     }
 }

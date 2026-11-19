@@ -26,12 +26,14 @@ public class DocumentProcessingService {
     private final TransactionTemplate transaction;
     private final boolean enabled;
     private final long leaseSeconds;
+    private final CloudDocumentSettings cloudSettings;
 
     public DocumentProcessingService(LearningDocumentRepository documents, DocumentChunkRepository chunks,
             LocalDocumentStore store, DocumentProcessorClient processor, SparseEmbeddingService embeddings,
-            PlatformTransactionManager manager,
+            PlatformTransactionManager manager, CloudDocumentSettings cloudSettings,
             @Value("${document.pipeline-enabled:false}") boolean enabled,
             @Value("${document.processing-timeout-seconds:300}") long timeout) {
+        this.cloudSettings = cloudSettings;
         this.documents = documents; this.chunks = chunks; this.store = store;
         this.processor = processor; this.embeddings = embeddings;
         this.transaction = new TransactionTemplate(manager);
@@ -42,7 +44,7 @@ public class DocumentProcessingService {
 
     @Scheduled(fixedDelayString = "${document.poll-interval-ms:2000}")
     public void poll() {
-        if (!enabled) return;
+        if (!enabled || cloudSettings.enabled()) return;
         // A crashed process leaves a durable job, not a permanently spinning UI.
         documents.findTop10ByIndexingStatusOrderByCreatedAtAsc("processing").forEach(stale ->
             transaction.executeWithoutResult(status -> documents.findLockedById(stale.getId()).ifPresent(doc -> {
@@ -58,7 +60,7 @@ public class DocumentProcessingService {
 
     public void process(Long id) {
         Job job = transaction.execute(status -> documents.findLockedById(id).map(doc -> {
-            if (!"pending".equals(doc.getIndexingStatus()) || doc.getSourceKey() == null) return null;
+            if (doc.getAttemptId() != null || !"pending".equals(doc.getIndexingStatus()) || doc.getSourceKey() == null) return null;
             String token = UUID.randomUUID().toString();
             doc.setIndexingStatus("processing");
             doc.setProcessingToken(token);
