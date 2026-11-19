@@ -66,27 +66,38 @@ public class ChatResponseService {
             List<ChatMessage> conversationHistory,
             Map<String, String> learningType
     ) {
-        if (shouldAskForClarification(userText)) {
-            return new AiReply(
-                    "입력이 너무 짧아서 의미를 정확히 모르겠어요. 한글/영어 입력 상태를 확인해서 다시 입력해 주세요.",
-                    "question", "rule"
-            );
-        }
+        var decision = new ConversationRouter().decide(userText, conversationHistory,
+                documentContext != null && !documentContext.isBlank());
+        return generateRoutedTurn(userText, user, documentContext, conversationHistory, learningType, decision);
+    }
 
-        ReplyMode mode = classifyReplyMode(userText);
+    public AiReply generateRoutedTurn(String userText, User user, String documentContext,
+            List<ChatMessage> history, Map<String, String> learningType, ConversationRouter.Decision decision) {
+        if (decision.mode() == ConversationRouter.Mode.CLARIFY) {
+            return new AiReply("입력이 너무 짧아서 또는 지시 대상이 불분명해서 확인이 필요합니다. 어떤 개념이나 코드에 관한 질문인가요?", "question", "rule");
+        }
+        // Retrieval owns evidence. Missing evidence never falls through to general knowledge generation.
+        if (decision.needsDocuments() && (documentContext == null || documentContext.isBlank())) {
+            return new AiReply("선택한 문서 범위에서 질문을 뒷받침할 근거를 찾지 못했습니다. 확인 필요: 관련 자료와 색인 상태를 확인하거나 질문을 구체화해 주세요.", "answer", "rule");
+        }
+        ReplyMode mode = decision.mode() == ConversationRouter.Mode.HINT ? ReplyMode.RUBBER_DUCK : ReplyMode.DIRECT_ANSWER;
         if ("extractive".equals(responseMode)) {
             if (mode == ReplyMode.RUBBER_DUCK) {
-                return new AiReply("문제에서 기대한 결과와 실제 결과가 처음 달라지는 지점을 설명해 볼 수 있나요?", "hint", "extractive");
+                String clue = switch (Math.min(decision.hintNumber(), 3)) {
+                    case 1 -> "기대한 결과와 실제 결과를 나란히 적어 보면 어떤 차이가 있나요?";
+                    case 2 -> "앞서 확인한 차이가 처음 나타나는 단계의 입력과 상태는 무엇인가요?";
+                    default -> "그 단계의 조건을 하나만 바꿔 실행하면 결과가 어떻게 달라지나요?";
+                };
+                return new AiReply(clue, "hint", "extractive");
             }
-            if (documentContext == null || documentContext.isBlank()) {
-                return new AiReply("업로드한 문서에서 질문과 관련된 근거를 찾지 못했습니다. 확인 필요: 관련 자료를 올리거나 질문을 구체적으로 적어 주세요. 현재는 외부 AI를 사용하지 않는 문서 발췌 모드입니다.", "answer", "extractive");
+            if (decision.needsDocuments()) {
+                return new AiReply("업로드 문서에서 찾은 관련 내용입니다.\n\n" + documentContext.substring(0, Math.min(documentContext.length(), 3200)), "answer", "extractive");
             }
-            String excerpt = documentContext.substring(0, Math.min(documentContext.length(), 3200));
-            return new AiReply("업로드 문서에서 찾은 관련 내용입니다.\n\n" + excerpt, "answer", "extractive");
+            return new AiReply("확인 필요: 현재 로컬 발췌 모드는 일반 질문에 대한 LLM 답변을 생성하지 않습니다.", "answer", "extractive");
         }
-        String prompt = buildTurnPrompt(userText, user, documentContext, conversationHistory, learningType, mode);
-        String content = requestText(prompt);
-        return new AiReply(content, mode == ReplyMode.DIRECT_ANSWER ? "answer" : "hint");
+        String prompt = buildTurnPrompt(userText, user, documentContext, history, learningType, mode)
+                + "\n현재 힌트 단계: " + decision.hintNumber() + " (힌트 모드에서만 적용). 이전 단서를 반복하지 말고 다음 관찰을 제안한다.";
+        return new AiReply(requestText(prompt), mode == ReplyMode.RUBBER_DUCK ? "hint" : "answer");
     }
 
     public String responseMode() { return responseMode; }
@@ -98,7 +109,11 @@ public class ChatResponseService {
             List<ChatMessage> conversationHistory,
             List<ChatMessage> previousHints
     ) {
-        if ("extractive".equals(responseMode)) return "기대한 결과와 실제 결과를 나란히 적으면 처음 달라지는 부분은 어디인가요?";
+        if ("extractive".equals(responseMode)) return switch (Math.min(hintNumber, 3)) {
+            case 1 -> "기대한 결과와 실제 결과를 나란히 적으면 어떤 차이가 있나요?";
+            case 2 -> "그 차이가 처음 나타나는 단계의 입력과 상태는 무엇인가요?";
+            default -> "그 단계의 조건 하나를 바꿔 실행하면 결과가 어떻게 달라지나요?";
+        };
         return requestText(buildHintPrompt(user, conversation, hintNumber, conversationHistory, previousHints));
     }
 
@@ -219,6 +234,8 @@ public class ChatResponseService {
                 모르는 내용과 문서에 없는 사실은 지어내지 말고 확인 필요라고 표시한다.
                 짧은 후속 질문은 현재 세션 전체 대화 기록에서 지시 대상을 찾되, 불분명하면 확인한다.
                 학습 유형은 설명 순서와 표현에만 적용하며 직접 답변을 금지하는 이유가 아니다.
+                페르소나는 말투에만 적용하며 선택된 응답 방식을 바꾸지 않는다.
+                문서 답변은 주어진 근거만 사용하고 근거가 질문에 답하지 못하면 근거 부족이라고 답한다. 출처 ID를 만들지 않는다.
                 %s
 
                 사용자 학습 유형:
@@ -236,19 +253,9 @@ public class ChatResponseService {
                     formatConversationHistory(conversationHistory), blankToNone(documentContext), blankToNone(userText));
     }
 
-    private ReplyMode classifyReplyMode(String userText) {
-        String normalized = userText == null ? "" : userText.toLowerCase(Locale.ROOT);
-        return containsAny(normalized, "힌트", "hint", "답을 알려주지", "정답 말고", "질문으로 유도")
+    private ReplyMode classifyReplyMode(String text) {
+        return new ConversationRouter().decide(text, List.of(), false).mode() == ConversationRouter.Mode.HINT
                 ? ReplyMode.RUBBER_DUCK : ReplyMode.DIRECT_ANSWER;
-    }
-
-    private boolean shouldAskForClarification(String userText) {
-        String normalized = userText == null ? "" : userText.replaceAll("\\s+", "").toLowerCase(Locale.ROOT);
-        if (normalized.isBlank() || normalized.equals("hi") || normalized.equals("hello")) {
-            return false;
-        }
-
-        return normalized.length() <= 2 && normalized.matches("[a-z0-9]+");
     }
 
     LearningStyleContext resolveLearningStyle(User user, Map<String, String> learningType) {
@@ -397,15 +404,6 @@ public class ChatResponseService {
         return value == null || value.isBlank() ? fallback : value;
     }
 
-    private boolean containsAny(String value, String... candidates) {
-        for (String candidate : candidates) {
-            if (value.contains(candidate)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     private String requestText(String prompt) {
         if (apiKey == null || apiKey.isBlank()) {
             throw new CustomException(ErrorCode.CHAT_RESPONSE_UNAVAILABLE);
@@ -435,7 +433,6 @@ public class ChatResponseService {
         } catch (CustomException exception) {
             throw exception;
         } catch (Exception exception) {
-            exception.printStackTrace();
             throw new CustomException(ErrorCode.CHAT_RESPONSE_UNAVAILABLE);
         }
     }
