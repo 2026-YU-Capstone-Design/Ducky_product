@@ -489,8 +489,11 @@ export function MaterialLibrary() {
                     {isDocumentSearchable(material) ? "검색 가능" : "검색 불가"}
                   </span>
                   {material.indexingStatus === "failed" && (
-                    <Button size="sm" variant="outline" disabled={retryingIds.has(material.id)}
+                    <Button size="sm" variant="outline" disabled={retryingIds.has(material.id) || material.retryAllowed === false}
                       onClick={() => void retryMaterial(material.id)}>다시 처리</Button>
+                  )}
+                  {material.indexingStatus === "failed" && material.retryAllowed === false && (
+                    <span className="text-xs text-gray-500">재처리에 필요한 원본 정보를 확인해야 합니다.</span>
                   )}
                   <label
                     className="flex items-center gap-2 text-xs font-bold text-gray-600 dark:text-gray-300"
