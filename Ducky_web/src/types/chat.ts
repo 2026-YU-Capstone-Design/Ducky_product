@@ -26,6 +26,7 @@ export interface ChatMessage {
   attachments?: ChatAttachment[];
   sources?: import("@/lib/api/documents").DocumentSearchResult[];
   responseMode?: string | null;
+  responseStrategy?: string | null;
 }
 
 export type SessionProgressStatus = "learning" | "completed";

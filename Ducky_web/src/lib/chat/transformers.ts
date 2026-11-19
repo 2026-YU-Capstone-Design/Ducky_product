@@ -60,6 +60,7 @@ export function toChatMessage(message: BackendChatMessage): ChatMessage {
     createdAt: message.createdAt,
     sources: message.sources,
     responseMode: message.responseMode,
+    responseStrategy: message.responseStrategy,
     ...(hintLevel ? { hintLevel } : {}),
     ...(message.hintNumber ? { hintNumber: message.hintNumber } : {}),
   };

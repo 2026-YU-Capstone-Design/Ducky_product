@@ -90,7 +90,7 @@ def run(base, output):
         request(base, path, other, method=method, expected=404)
     conversation = request(base, "/api/chat/conversations", owner, payload={"title": "RAG integration", "topic": "Quasar"})
     turn = request(base, "/api/chat/messages", owner, payload={"conversationId": int(conversation["id"]),
-                    "message": "Quasar retry budget", "inputType": "text"})
+                    "message": "Quasar retry budget", "inputType": "text", "documentIds": [int(doc_id)]})
     reply = turn["aiResponse"]
     assert "seven" in reply["content"] and reply["responseMode"] == "extractive"
     assert reply["sources"][0]["documentId"] == doc_id
@@ -121,7 +121,8 @@ def run(base, output):
     assert any("ZeroDivisionError: division by zero" in hit["content"] for hit in lesson_hits)
     assert request(base, "/api/documents/search", other, payload=lesson_query)["results"] == []
     lesson_reply = request(base, "/api/chat/messages", owner, payload={
-        "conversationId": int(conversation["id"]), "message": "average ZeroDivisionError", "inputType": "text"})["aiResponse"]
+        "conversationId": int(conversation["id"]), "message": "average ZeroDivisionError", "inputType": "text",
+        "documentIds": [int(lesson["id"])]})["aiResponse"]
     assert any(code in source["content"] for source in lesson_reply["sources"])
     assert any("ZeroDivisionError: division by zero" in source["content"] for source in lesson_reply["sources"])
     request(base, f'/api/documents/{lesson["id"]}', owner, method="DELETE")

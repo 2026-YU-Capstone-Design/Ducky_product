@@ -35,6 +35,24 @@ const chat = load('lib/api/chat.ts');
 const { toChatMessage } = load('lib/chat/transformers.ts');
 const originalFetch = global.fetch;
 const originalTimeout = global.setTimeout;
+
+test('chat distinguishes omitted and empty selection and restores response strategy', async () => {
+  login();
+  const bodies = [];
+  global.fetch = async (_url, options) => {
+    bodies.push(JSON.parse(options.body));
+    return response({});
+  };
+  await chat.sendChatMessage({ conversationId: '1', message: 'question' });
+  await chat.sendChatMessage({ conversationId: '1', message: 'question', documentIds: [] });
+  await chat.sendChatMessage({ conversationId: '1', message: 'question', documentIds: [7] });
+  assert.equal(Object.hasOwn(bodies[0], 'documentIds'), false);
+  assert.deepEqual(bodies[1].documentIds, []);
+  assert.deepEqual(bodies[2].documentIds, [7]);
+  const restored = toChatMessage({ id: '1', role: 'assistant', content: 'answer', type: 'answer',
+    createdAt: '2026-11-19', responseStrategy: 'DOCUMENT', responseMode: 'extractive', sources: [] });
+  assert.equal(restored.responseStrategy, 'DOCUMENT');
+});
 let token;
 function login(value = 'synthetic-account-a') {
   token = value;
