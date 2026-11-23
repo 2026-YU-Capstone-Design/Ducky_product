@@ -154,6 +154,8 @@ private verify가 꼭 필요하면 소유자의 기존 PC에서 외부 로컬 �
 
 ### 6.3 제품 로컬 실행
 
+2026-11-24 추가한 개발 실행기를 사용하는 경우 Java 17, Node.js 24, Python 3.12 설치 후 저장소 루트에서 `npm run setup:local`을 한 번 실행하고 매번 `npm run dev`로 시작한다. 세 서비스를 자동 연결하며 DB·업로드는 `.runtime/local-dev/<API포트>/`에 격리한다. 사용 중인 포트는 건드리지 않고 `Ctrl+C`로 직접 시작한 서비스만 정리한다. 상세 사용법은 [루트 README](../README.md)를 참고한다. 아래는 서비스별 수동 실행 대안이며 실행기와 동시에 같은 포트로 시작하지 않는다.
+
 새 clone의 제품 루트에서 설치한다. Windows의 `python`이 Store 별칭일 수 있으므로 `py -3.12` 또는 가상환경 실행 파일을 사용한다.
 
 ```powershell

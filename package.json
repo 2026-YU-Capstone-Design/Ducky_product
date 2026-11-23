@@ -1,0 +1,12 @@
+{
+  "name": "ducky-local-development",
+  "private": true,
+  "scripts": {
+    "setup:local": "node scripts/local-dev.mjs setup",
+    "dev": "node scripts/local-dev.mjs start",
+    "test:local": "node --test scripts/local-dev.test.mjs"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}
