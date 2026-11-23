@@ -39,6 +39,20 @@ class DocumentFlowTest extends ApiFlowTest {
     private static final String PPTX_CONTENT_TYPE =
             "application/vnd.openxmlformats-officedocument.presentationml.presentation";
 
+    @org.springframework.beans.factory.annotation.Autowired com.rubberduck.domain.document.service.DocumentService documentService;
+    @org.springframework.beans.factory.annotation.Autowired com.rubberduck.domain.document.repository.LearningDocumentRepository documents;
+    @Test void disabledPipelineDoesNotAdvertiseRetry() {
+        var owner=newUser("disabledRetry");
+        var doc=com.rubberduck.domain.document.entity.LearningDocument.create(owner,"legacy","old.txt","text/plain",5,"note");
+        doc.setSourceKey("local/old/source.txt");doc.markFailed("PROCESSOR_UNAVAILABLE");doc=documents.save(doc);
+        final Long id=doc.getId();
+        org.assertj.core.api.Assertions.assertThat(documentService.get(owner,id).retryAllowed()).isFalse();
+        org.assertj.core.api.Assertions.assertThat(documentService.list(owner).stream().filter(r->r.id().equals(id.toString())).findFirst().orElseThrow().retryAllowed()).isFalse();
+        org.assertj.core.api.Assertions.assertThatThrownBy(()->documentService.retry(owner,id))
+            .isInstanceOf(com.rubberduck.global.exception.CustomException.class).extracting("errorCode")
+            .isEqualTo(com.rubberduck.global.exception.ErrorCode.DOCUMENT_RETRY_NOT_ALLOWED);
+    }
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Test

@@ -74,6 +74,18 @@ public class LearningDocument {
     @Column(name = "processing_token", length = 40)
     private String processingToken;
 
+    @Column(length = 36)
+    private String attemptId;
+    @Column(length = 255)
+    private String sourceBucket;
+    @Column(length = 1024)
+    private String sourceVersionId;
+    @Column(name = "source_etag", length = 128)
+    private String sourceETag;
+    @Column(length = 64)
+    private String completedJobId;
+    @Column(length = 255)
+    private String processorRevision;
     private Instant processingStartedAt;
     private Double processingSeconds;
     private Integer chunkCount;

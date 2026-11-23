@@ -70,6 +70,9 @@ public class Conversation {
     @Column(name = "completed_at")
     private Instant completedAt;
 
+    @Column(columnDefinition = "text")
+    private String selectedDocumentIdsJson;
+
     public static Conversation start(User user, Device device, Long personaId, String title, String topic) {
         Conversation conversation = new Conversation();
         conversation.setUser(user);

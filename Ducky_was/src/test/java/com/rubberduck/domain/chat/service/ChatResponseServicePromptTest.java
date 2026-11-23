@@ -16,6 +16,18 @@ class ChatResponseServicePromptTest {
     private final ChatResponseService chatResponseService = new ChatResponseService("", "test-model", 1);
 
     @Test
+    void generalIntentExcludesStaleCandidatesAndWeakCandidatesRequireSupportJudgment() {
+        User user = userWithLearningStyle("active", "visual", "sequential");
+        String candidate = "[문서 4, 청크 5] Quasar retries stop after seven attempts.";
+        assertThat(chatResponseService.buildTurnPrompt("문서와 관계없이 파이썬 리스트가 뭐야?", user, candidate, List.of(), null))
+                .contains("직접 답변이다").doesNotContain("Quasar retries");
+        // This checks the instruction only, not whether a real LLM obeys it.
+        assertThat(chatResponseService.buildTurnPrompt("문서에서 Quasar 창시자의 생년월일은?", user, candidate, List.of(), null))
+                .contains(candidate).contains("근거가 질문에 답하지 못하면 근거 부족이라고 답한다")
+                .contains("출처 ID를 만들지 않는다");
+    }
+
+    @Test
     void shortEnglishFragmentsAskForClarificationInsteadOfGuessingAcronyms() {
         ChatResponseService.AiReply reply = chatResponseService.generateTurn(
                 "gd",
@@ -100,7 +112,7 @@ class ChatResponseServicePromptTest {
     @Test
     void explicitHintAndDocumentQuestionUseDifferentGuidance() {
         User user = userWithLearningStyle("active", "visual", "sequential");
-        assertThat(chatResponseService.buildTurnPrompt("힌트만 줘", user, "", List.of(), null))
+        assertThat(chatResponseService.buildTurnPrompt("정렬 힌트만 줘", user, "", List.of(), null))
                 .contains("힌트 요청이다").contains("질문 1개");
         assertThat(chatResponseService.buildTurnPrompt("업로드 제한은?", user, "[문서 4, 청크 5] 20MB", List.of(), null))
                 .contains("문서 근거 답변이다").contains("[문서 ID, 청크 ID]")
