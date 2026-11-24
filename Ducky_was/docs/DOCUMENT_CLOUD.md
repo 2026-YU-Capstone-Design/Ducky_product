@@ -31,15 +31,19 @@ The index boundary is `DocumentIndexWriter.replace`, called inside the completio
 
 Existing HTTP API endpoints remain; response fields added: attemptId, sourceType, sourceSha256, sourceVersionId, sourceETag, retryAllowed. Source download URLs are not exposed. `processed` is conversion only; `indexed` is reached after validated DB index commit. Queue poison messages require the infrastructure DLQ policy. Physical S3/version cleanup is deferred: document deletion removes DB chunks and document visibility but retains attempt audit records and S3 objects. No live cleanup lifecycle is installed here.
 
-Schema: existing development configuration uses Hibernate ddl-auto=update. For existing
-managed schemas review and run `src/main/resources/db/manual/20261119_document_cloud.sql`,
-then `src/main/resources/db/manual/20261120_conversation_harness.sql`, before switching
-to validate. The second script adds the nullable conversation selection and response
-strategy columns without changing existing rows. Both scripts are repeatable. These are
-manual migrations, not an automatically activated Flyway baseline or a fresh-schema installer.
+Schema: review the existing schema and take a backup before upgrading. Apply the scripts in
+`src/main/resources/db/manual/` in order before starting the new backend with
+`JPA_DDL_AUTO=validate`.
 
-`ManualReleaseSchemaTest` checks legacy-row preservation, repeat application and Hibernate
-schema validation on H2 locally and on disposable PostgreSQL 17 in CI. Its optional
+1. `20261119_document_cloud.sql` adds cloud source fields and upload attempt history.
+2. `20261120_conversation_harness.sql` adds conversation selection and response strategy.
+3. `20261124_document_legacy_schema_bridge.sql` adds the 15 nullable metadata columns needed by the older production schema.
+
+These are repeatable manual migrations for existing schemas. They leave pre-existing row
+values in place and require an explicit run before deployment.
+
+`ManualReleaseSchemaTest` checks the conversation upgrade on H2 and the complete legacy
+production upgrade on disposable PostgreSQL 17. Its optional
 `RELEASE_SCHEMA_TEST_DB_URL` accepts only a loopback URL for `ducky_release_schema_test`
 with fixed synthetic credentials: this test creates/drops its own schema and must never
 target a shared database. The Compose configuration tests render synthetic inputs only;
