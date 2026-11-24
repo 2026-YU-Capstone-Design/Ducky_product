@@ -7,6 +7,7 @@ public record DocumentSearchResult(
         String content,
         double score,
         String blockId,
-        String headingPath
+        String headingPath,
+        Integer pageNumber
 ) {
 }
