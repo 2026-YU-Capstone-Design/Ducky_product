@@ -126,7 +126,7 @@ export function SettingsDashboard() {
 
   return (
     <div className="flex min-h-full w-full flex-1 flex-col bg-[#FFFCF3] transition-colors dark:bg-[#16130A]">
-      <section className="mx-auto flex w-full max-w-[944px] flex-1 flex-col px-5 py-8 sm:px-8 lg:px-10">
+      <section className="mx-auto flex w-full max-w-[944px] flex-1 flex-col px-5 pt-8 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-8 lg:px-10 md:py-8">
         <div className="mb-2 py-6">
           <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-1 mb-3 text-[10px] font-bold tracking-[0.12em] text-amber-700 uppercase dark:bg-amber-900/40 dark:text-amber-300">
             <span className="size-1.5 rounded-full bg-amber-400 animate-pulse" />
@@ -227,7 +227,7 @@ export function SettingsDashboard() {
                 </div>
                 <Switch
                   aria-label="다크 모드"
-                checked={darkMode}
+                  checked={darkMode}
                   className="data-checked:bg-[#2E2A22] data-unchecked:bg-amber-100 shrink-0 dark:data-checked:bg-[#FECA43] dark:data-unchecked:bg-white/10"
                   id="settings-dark-mode"
                   onCheckedChange={setDarkMode}
@@ -256,7 +256,7 @@ export function SettingsDashboard() {
                 </div>
                 <Switch
                   aria-label="학습 리마인더"
-                checked={studyReminder}
+                  checked={studyReminder}
                   className="data-checked:bg-[#2E2A22] data-unchecked:bg-amber-100 shrink-0 dark:data-checked:bg-[#FECA43] dark:data-unchecked:bg-white/10"
                   id="settings-study-reminder"
                   onCheckedChange={setStudyReminder}
