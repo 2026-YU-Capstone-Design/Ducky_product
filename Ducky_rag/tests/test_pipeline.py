@@ -54,6 +54,7 @@ def test_image_only_pdf_requires_ocr():
 
 @pytest.mark.parametrize("data,document_id,kind,error", [
     (b"not a pdf", "1", "pdf", "INVALID_PDF"),
+    (b"%PDF-1.7\nsynthetic malformed input\n", "1", "pdf", "INVALID_PDF"),
     (b"some useful text", "../2", "txt", "INVALID_DOCUMENT_ID"),
     (b"", "1", "pdf", "FILE_SIZE_LIMIT"),
     (b"some useful text", "1", "exe", "UNSUPPORTED_FILE_TYPE"),
