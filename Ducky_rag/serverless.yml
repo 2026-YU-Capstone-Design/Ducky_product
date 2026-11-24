@@ -26,11 +26,18 @@ provider:
     RAG_PROCESSOR_REVISION: ${env:RAG_PROCESSOR_REVISION}
 
 functions:
-  processor:
-    name: ducky-document-${sls:stage}-processor
-    image:
-      uri: ${env:DOCUMENT_LAMBDA_IMAGE_URI}
-    reservedConcurrency: 2
+  processor: ${self:custom.processorByStage.${sls:stage}}
+
+custom:
+  processorByStage:
+    # Dev uses the account pool. Terraform separately limits SQS to two invocations.
+    dev: &processor
+      name: ducky-document-${sls:stage}-processor
+      image:
+        uri: ${env:DOCUMENT_LAMBDA_IMAGE_URI}
+    prod:
+      <<: *processor
+      reservedConcurrency: 2
 
 resources:
   Outputs:
