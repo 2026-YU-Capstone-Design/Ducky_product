@@ -1,0 +1,39 @@
+service: ducky-document
+frameworkVersion: '3.40.0'
+configValidationMode: error
+
+# Shared resources and SQS event source mapping belong to Ducky_infra.
+# This stack deploys the Lambda image and its log group only.
+provider:
+  name: aws
+  region: ${env:AWS_REGION, 'ap-southeast-2'}
+  stage: ${opt:stage, 'dev'}
+  architecture: x86_64
+  memorySize: 2048
+  timeout: 300
+  logRetentionInDays: 14
+  iam:
+    role: ${env:DOCUMENT_LAMBDA_ROLE_ARN}
+    deploymentRole: ${env:DOCUMENT_DEPLOYMENT_ROLE_ARN}
+  deploymentBucket:
+    name: ${env:SERVERLESS_DEPLOYMENT_BUCKET}
+    skipPolicySetup: true
+  deploymentPrefix: ducky-document
+  environment:
+    DOCUMENT_BUCKET: ${env:DOCUMENT_BUCKET}
+    DOCUMENT_REQUEST_QUEUE_ARN: ${env:DOCUMENT_REQUEST_QUEUE_ARN}
+    DOCUMENT_COMPLETION_QUEUE_URL: ${env:DOCUMENT_COMPLETION_QUEUE_URL}
+    RAG_PROCESSOR_REVISION: ${env:RAG_PROCESSOR_REVISION}
+
+functions:
+  processor:
+    name: ducky-document-${sls:stage}-processor
+    image:
+      uri: ${env:DOCUMENT_LAMBDA_IMAGE_URI}
+    reservedConcurrency: 2
+
+resources:
+  Outputs:
+    ProcessorArn:
+      Value:
+        Fn::GetAtt: [ProcessorLambdaFunction, Arn]
