@@ -317,8 +317,9 @@ DOCUMENT_COMPLETION_POLL_ENABLED=true
 
 1. `Ducky_was/src/main/resources/db/manual/20261119_document_cloud.sql`: 문서 source/attempt/revision 필드와 `document_upload_attempts`.
 2. `Ducky_was/src/main/resources/db/manual/20261120_conversation_harness.sql`: `conversations.selected_document_ids_json`, `messages.response_strategy`.
+3. `Ducky_was/src/main/resources/db/manual/20261124_document_legacy_schema_bridge.sql`: 기존 운영 스키마에 필요한 문서·청크·채팅 메타데이터 열 15개.
 
-운영에 두 SQL을 실행하거나 `ddl-auto=update`로 자동 변경하지 않았다. migration 적용과 RDS 전환은 동일 작업이 아니다. 기존 PostgreSQL을 유지하는 경우에도 cloud 문서 연결은 가능하며 RDS가 문서 처리의 필수 선행이라고 단정하지 않는다.
+운영 전환 시 백업을 갱신하고 SQL 세 개를 순서대로 적용한 뒤 `JPA_DDL_AUTO=validate`로 새 백엔드를 시작한다. 기존 PostgreSQL에서도 cloud 문서 연결을 사용할 수 있으며 RDS 전환은 별도다.
 
 제품 publish workflow는 `main` push에서 이미지를 발행하고 프론트 deploy 태그를 갱신한다. `develop` 병합은 이 publish 조건에 해당하지 않는다. backend/Lambda가 자동으로 운영 반영됐다고 가정하지 않는다. 운영 배포 금지 상태에서는 `main` 병합이나 publish workflow 수동 실행을 하지 않는다.
 
