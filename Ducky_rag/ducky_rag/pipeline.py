@@ -35,7 +35,11 @@ def process_document(data: bytes, document_id: str, source_type: str, *,
     if source_type == "pdf":
         if not data.startswith(b"%PDF-"):
             raise ProcessingError("INVALID_PDF")
-        with pymupdf.open(stream=data, filetype="pdf") as document:
+        try:
+            document = pymupdf.open(stream=data, filetype="pdf")
+        except pymupdf.FileDataError as error:
+            raise ProcessingError("INVALID_PDF") from error
+        with document:
             if document.needs_pass:
                 raise ProcessingError("ENCRYPTED_PDF")
             page_count = len(document)
