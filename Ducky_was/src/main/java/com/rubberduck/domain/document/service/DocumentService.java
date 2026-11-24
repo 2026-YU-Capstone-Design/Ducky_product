@@ -23,6 +23,8 @@ import com.rubberduck.global.exception.CustomException;
 import com.rubberduck.global.exception.ErrorCode;
 
 import lombok.RequiredArgsConstructor;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 @Service
 @RequiredArgsConstructor
@@ -40,6 +42,7 @@ public class DocumentService {
     private final LocalDocumentStore documentStore;
     private final CloudDocumentSettings cloudSettings;
     private final CloudDocumentUploadService cloudUpload;
+    private final ObjectMapper objectMapper;
 
     @Value("${document.pipeline-enabled:false}")
     private boolean pipelineEnabled;
@@ -189,8 +192,20 @@ public class DocumentService {
                         ? sparseEmbeddingService.score(sparseQuery, chunk.getEmbeddingJson())
                         : embeddingService.cosine(queryEmbedding, embeddingService.fromJson(chunk.getEmbeddingJson())),
                 chunk.getBlockId(),
-                chunk.getHeadingPath()
+                chunk.getHeadingPath(),
+                pageNumber(chunk)
         );
+    }
+
+    private Integer pageNumber(DocumentChunk chunk) {
+        String provenance = chunk.getProvenanceJson();
+        if (provenance == null || provenance.isBlank()) return null;
+        try {
+            return DocumentResultValidator.page(objectMapper.readTree(provenance).path("pageNumber"));
+        } catch (JacksonException | IllegalArgumentException ignored) {
+            // An older chunk can still be cited without a structured page number.
+            return null;
+        }
     }
 
     private LearningDocument getUserDocument(User user, Long documentId) {

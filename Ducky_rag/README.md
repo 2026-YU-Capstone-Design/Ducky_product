@@ -11,10 +11,12 @@
 - `ducky_rag/pipeline.py`: 입력 형식·크기 검증, PDF 텍스트 변환, 청크와 처리 결과 생성.
 - `ducky_rag/normalization.py`: 코드·스택 트레이스·수식·표 보존, 블록 ID·제목 경로·원문 줄 위치 관리.
 - `ducky_rag/server.py`: Spring이 호출하는 내부 HTTP 처리기.
+- `ducky_rag/pdf_layout.py`, `ducky_rag/chunking.py`: PDF 페이지 출처와 청크 문맥을 구성한다.
+- `ducky_rag/aws_contract.py`, `ducky_rag/lambda_handler.py`: S3 이벤트와 SQS 배치, 처리 산출물과 완료 메시지 계약을 처리한다.
 - `tests/`: 디버깅 학습 자료와 처리 실패 사례 검증.
 - `scripts/smoke.py`: 실제 업로드·소유자별 검색·발췌 답변·근거 저장 통합 검증.
 
-신경망 의미 임베딩, OCR, LLM 답변, GraphRAG, S3/SQS/Lambda 연동은 이 로컬 경로의 구현 완료 항목이 아니다. 기존 OpenAI Responses 답변 호출은 유지되며 `rag-local` 프로필에서는 호출하지 않는다. 운영 기본 설정에는 새 처리기를 자동 활성화하지 않았다.
+로컬 경로는 문서 변환, 검색과 발췌 답변을 제공한다. 기존 OpenAI Responses 답변 호출은 유지되며 `rag-local` 프로필에서는 호출하지 않는다. Lambda를 사용하는 AWS 경로는 실제 배포 환경에서 별도로 검증한다.
 
 ## 로컬 실행 (PowerShell, 저장소 루트)
 
@@ -53,6 +55,16 @@ npm.cmd run dev -- --hostname 127.0.0.1 --port 13000
 
 DB는 `Ducky_was/data/rag-local.mv.db`, 원본·산출물은 `Ducky_was/data/documents/{userId}/{documentId}/`에 남는다. 운영 DB 및 기존 계정과 분리된다. 개발용 인증 비밀값을 사용하는 이 프로필은 루프백 주소에만 바인딩한다.
 
+## Lambda 이미지와 개발 환경
+
+Lambda 이미지는 `Ducky_rag` 디렉터리를 빌드 컨텍스트로 사용한다. `Dockerfile.lambda`는 Python 3.12 Lambda 런타임을 사용한다.
+
+```bash
+docker build --platform linux/amd64 -f Dockerfile.lambda -t ducky-document:dev .
+```
+
+`serverless.yml`은 함수와 로그 그룹을 정의한다. 문서 버킷, 요청·완료 큐, ECR, 역할과 이벤트 소스 매핑은 인프라에서 관리한다. dev 배포에는 해당 인프라 출력과 이미지의 불변 ECR digest를 사용한다. `RAG_PROCESSOR_REVISION`에는 빌드한 소스의 전체 Git SHA를 지정한다. Spring의 입력과 상태 전이는 [문서 클라우드 모드](../Ducky_was/docs/DOCUMENT_CLOUD.md)를 참고한다.
+
 ## 검증
 
 백엔드와 처리기를 띄운 상태에서 저장소 루트에서 실행한다.
@@ -72,7 +84,7 @@ $env:PYTHONPATH = 'Ducky_rag'
 - 상태: `pending → processing → indexed | failed`. `GET /api/documents/{id}` 및 목록으로 조회. `POST /api/documents/{id}/retry`는 소유자의 실패 문서만 허용한다.
 - Spring → 처리기: `POST /process?documentId=<서버 DB ID>&sourceType=pdf`, octet-stream 원본 바이트. 루프백 밖에서는 `RAG_WORKER_TOKEN` 필수. 브라우저가 직접 호출하지 않는다.
 - 처리기 응답: `schemaVersion=ducky-document-v1`, `documentId`, `sourceSha256`, `markdown`, `canonicalBlocks`, `chunks`, `report`, `warnings`, `pageCount`, `processingSeconds`.
-- 정규화 버전: `ducky-learning-v1`, 블록 스키마 `ducky-blocks-v1`. 문서 종류는 `learning_document`다. Markdown의 문서 ID는 서버 ID로 생성한다.
+- 정규화 버전은 `ducky-learning-v2`, 청커는 `ducky-page-chunks-v2`, 블록 스키마는 `ducky-blocks-v1`이다. 문서 종류는 `learning_document`다. Markdown의 문서 ID는 서버 ID로 생성한다.
 - 청크: `blockId`, `chunkKey`, `content`, `textForEmbedding`, `headingPath`, `blockType`, `previousBlockId`, `nextBlockId`. Markdown 표 행과 블록 수식은 유지하고, 긴 본문·코드는 공백과 기호를 변경하지 않고 분할한다. 코드 블록의 언어·들여쓰기·빈 줄을 보존한다.
 - 저장: `source`, `document.md`, `canonical.jsonl`, `result.json`. 파일 이름을 저장 경로로 사용하지 않는다. DB에 청크 내용·출처·벡터 모델을 저장한다.
 - 벡터: `lexical-ko-en-v1`, 단어 및 한국어 2글자 특징의 정규화 sparse map. 고정 차원의 dense 벡터가 아니다. 기존 64차원 해시 청크는 호환 읽기를 유지한다.

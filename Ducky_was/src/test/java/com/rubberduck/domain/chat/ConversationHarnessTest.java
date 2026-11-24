@@ -94,6 +94,34 @@ class ConversationHarnessTest extends ApiFlowTest {
         assertThat(absent.path("sources").size()).isZero();
     }
 
+    @Test void preservesIndexedPdfPagesInAnswersAndConversationHistory() throws Exception {
+        var user = newUser("pdf-source-pages");
+        Long id = session(user);
+        var pdf = LearningDocument.create(user, "guide", "guide.pdf", "application/pdf", 100, "pdf");
+        pdf.markIndexed();
+        documents.save(pdf);
+        String[] pageContents = {"Quasar retry budget seven attempts", "Zephyr access token expires"};
+        for (int i = 0; i < pageContents.length; i++) {
+            var chunk = DocumentChunk.create(pdf, i, pageContents[i], embeddings.serialize(pageContents[i]));
+            chunk.setEmbeddingModel(SparseEmbeddingService.MODEL);
+            chunk.setProvenanceJson(new ObjectMapper().createObjectNode().put("pageNumber", i + 1).toString());
+            chunks.save(chunk);
+        }
+        for (int i = 0; i < pageContents.length; i++) {
+            var response = apiSend(user, id, pageContents[i], List.of(pdf.getId()));
+            var source = response.path("sources").get(0);
+            assertThat(source.path("documentId").asText()).isEqualTo(pdf.getId().toString());
+            assertThat(source.path("pageNumber").asInt()).isEqualTo(i + 1);
+        }
+        em.flush();
+        em.clear();
+        mockMvc.perform(get("/api/chat/conversations/" + id)
+                        .header("Authorization", "Bearer " + tokens.issue(user.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.messages[1].sources[0].pageNumber").value(1))
+                .andExpect(jsonPath("$.data.messages[3].sources[0].pageNumber").value(2));
+    }
+
     @Test void explicitSelectionDoesNotSupplyMissingHintTargetOrMakePendingDocumentSearchable() throws Exception {
         var user = newUser("selection-clarify-api"); Long id = session(user);
         Long selected = document(user, "Quasar retry budget", false);

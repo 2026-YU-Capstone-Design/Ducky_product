@@ -11,7 +11,7 @@ import re
 from collections import Counter
 from datetime import datetime, timezone
 
-NORMALIZER_VERSION = "ducky-learning-v1"
+NORMALIZER_VERSION = "ducky-learning-v2"
 BLOCK_SCHEMA = "ducky-blocks-v1"
 FRONTMATTER = re.compile(r"\A---\n.*?\n---(?:\n|$)", re.S)
 HEADING = re.compile(r"^ {0,3}(#{1,6})\s+(.+?)\s*$")
@@ -86,7 +86,7 @@ def _cells(line: str) -> list[str]:
 
 
 def build_canonical_blocks(markdown: str, *, doc_id: str,
-                           markdown_key: str) -> tuple[list[dict], dict]:
+                           markdown_key: str, pdf_pages=None) -> tuple[list[dict], dict]:
     header = FRONTMATTER.match(markdown)
     metadata = {}
     if header:
@@ -124,6 +124,10 @@ def build_canonical_blocks(markdown: str, *, doc_id: str,
             "attrs": dict(attrs or {}), "warnings": list(warnings or []),
         }
         block["block_id"] = _block_id(doc_id, len(blocks) + 1, kind, text, start)
+        if pdf_pages:
+            page = next((p for p in pdf_pages if p["line_start"] <= start <= p["line_end"]), None)
+            if page:
+                block["source"]["page"] = page["page"]
         block["attrs"].update(searchable=block["searchable"], search_role=role)
         blocks.append(block)
         return block
@@ -235,6 +239,7 @@ def build_canonical_blocks(markdown: str, *, doc_id: str,
         "counts_by_type": dict(Counter(block["type"] for block in blocks)),
         "warning_count": sum(len(block["warnings"]) for block in blocks),
         "warnings": [],
+        "pdf_pages": pdf_pages or [],
     }
     return blocks, report
 
