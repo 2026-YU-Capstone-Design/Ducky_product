@@ -201,7 +201,7 @@ public class ChatService {
         String documentContext = documentService.toPromptContext(sources);
         AiReply aiReply = completion
                 ? new AiReply(chatResponseService.generateCompletionFeedback(user, conversation, conversationHistory), "feedback", chatResponseService.responseMode())
-                : chatResponseService.generateRoutedTurn(normalizedText, user, documentContext, conversationHistory, learningType, decision);
+                : chatResponseService.generateRoutedTurn(normalizedText, user, documentContext, conversationHistory, learningType, decision, sources);
 
         ChatMessage aiMessage = ChatMessage.create(
                 conversation,
@@ -211,8 +211,8 @@ public class ChatService {
                 "system",
                 userSequence + 1
         );
-        aiMessage.setSources(sources);
-        aiMessage.setResponseStrategy(completion ? "COMPLETION" : decision.needsDocuments() && sources.isEmpty()
+        aiMessage.setSources(aiReply.sources());
+        aiMessage.setResponseStrategy(completion ? "COMPLETION" : decision.needsDocuments() && aiReply.sources().isEmpty()
                 ? "INSUFFICIENT_EVIDENCE" : decision.mode().name());
         if ("hint".equals(aiReply.type())) {
             int number = conversation.getHintCount() + 1;
@@ -257,11 +257,11 @@ public class ChatService {
                 ? documentService.search(user, routed.searchQuery(), 3, selectedIds).results()
                 : java.util.List.<com.rubberduck.domain.document.dto.DocumentSearchResult>of();
         AiReply reply = routed.needsDocuments() || routed.mode() == ConversationRouter.Mode.CLARIFY
-                ? chatResponseService.generateRoutedTurn("다음 힌트", user, documentService.toPromptContext(sources), conversationHistory, null, routed)
+                ? chatResponseService.generateRoutedTurn("다음 힌트", user, documentService.toPromptContext(sources), conversationHistory, null, routed, sources)
                 : new AiReply(chatResponseService.generateHint(user, conversation, hintNumber, conversationHistory, previousHints), "hint", chatResponseService.responseMode());
         ChatMessage hintMessage = ChatMessage.create(conversation, "assistant", reply.content(), reply.type(), "system", conversation.getMessageCount() + 1);
-        hintMessage.setSources(sources);
-        hintMessage.setResponseStrategy(routed.needsDocuments() && sources.isEmpty() ? "INSUFFICIENT_EVIDENCE" : routed.mode().name());
+        hintMessage.setSources(reply.sources());
+        hintMessage.setResponseStrategy(routed.needsDocuments() && reply.sources().isEmpty() ? "INSUFFICIENT_EVIDENCE" : routed.mode().name());
         hintMessage.setResponseMode(reply.responseMode());
         if ("hint".equals(reply.type())) {
             hintMessage.setHintNumber(hintNumber);

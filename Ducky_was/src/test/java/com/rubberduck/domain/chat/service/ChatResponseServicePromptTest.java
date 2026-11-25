@@ -9,11 +9,54 @@ import org.junit.jupiter.api.Test;
 
 import com.rubberduck.domain.chat.entity.ChatMessage;
 import com.rubberduck.domain.chat.entity.Conversation;
+import com.rubberduck.domain.document.dto.DocumentSearchResult;
 import com.rubberduck.domain.user.entity.User;
+import tools.jackson.databind.ObjectMapper;
 
 class ChatResponseServicePromptTest {
 
     private final ChatResponseService chatResponseService = new ChatResponseService("", "test-model", 1);
+
+    @Test
+    void groundedAnswerKeepsOnlySourcesTheModelSelected() {
+        var candidates = List.of(
+                new DocumentSearchResult("4", "5", "Guide", "Intro", 0.4, "first", "Introduction", 1, List.of("first")),
+                new DocumentSearchResult("4", "6", "Guide", "Answer", 0.3, "second", "Details", 2, List.of("second")));
+        var reply = chatResponseService.parseGroundedReply(
+                """
+                {"answer":"**Seven attempts.**","source_chunk_ids":["6"]}
+                """, "answer", candidates);
+        assertThat(reply.content()).isEqualTo("**Seven attempts.**");
+        assertThat(reply.sources()).containsExactly(candidates.get(1));
+    }
+
+    @Test
+    void missingOrUnknownEvidenceDoesNotProduceCitationsOrUnverifiedHints() {
+        var candidates = List.of(
+                new DocumentSearchResult("4", "5", "Guide", "Intro", 0.4, "first", "", 1, List.of("first")));
+        for (String json : List.of(
+                """
+                {"answer":"Unsupported claim.","source_chunk_ids":[]}
+                """,
+                """
+                {"answer":"Unsupported claim.","source_chunk_ids":["5","99"]}
+                """)) {
+            var reply = chatResponseService.parseGroundedReply(json, "hint", candidates);
+            assertThat(reply.sources()).isEmpty();
+            assertThat(reply.type()).isEqualTo("answer");
+            assertThat(reply.content()).contains("근거를 찾지 못했습니다").doesNotContain("Unsupported claim");
+        }
+    }
+
+    @Test
+    void olderStoredSourceRetainsItsPrimaryBlock() {
+        var source = new ObjectMapper().readValue(
+                """
+                {"documentId":"4","chunkId":"5","title":"Guide","content":"Legacy excerpt","score":0.25,
+                 "blockId":"legacy-block","headingPath":"Details","pageNumber":1}
+                """, DocumentSearchResult.class);
+        assertThat(source.blockIds()).containsExactly("legacy-block");
+    }
 
     @Test
     void generalIntentExcludesStaleCandidatesAndWeakCandidatesRequireSupportJudgment() {
@@ -115,7 +158,7 @@ class ChatResponseServicePromptTest {
         assertThat(chatResponseService.buildTurnPrompt("정렬 힌트만 줘", user, "", List.of(), null))
                 .contains("힌트 요청이다", "질문 1개", "현재 힌트 단계: 1");
         assertThat(chatResponseService.buildTurnPrompt("업로드 제한은?", user, "[문서 4, 청크 5] 20MB", List.of(), null))
-                .contains("문서 근거 답변이다").contains("[문서 ID, 청크 ID]")
+                .contains("문서 근거 답변이다").contains("실제 사용한 발췌만 근거로 선택한다")
                 .contains("신뢰할 수 없는 참고 자료").contains("확인 필요");
     }
 

@@ -1,6 +1,8 @@
 package com.rubberduck.domain.chat.service;
 
 import java.time.Duration;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -9,20 +11,37 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 
-import tools.jackson.databind.JsonNode;
 import com.rubberduck.domain.chat.entity.ChatMessage;
 import com.rubberduck.domain.chat.entity.Conversation;
 import com.rubberduck.domain.chat.service.ConversationRouter.Mode;
+import com.rubberduck.domain.document.dto.DocumentSearchResult;
 import com.rubberduck.domain.user.entity.User;
 import com.rubberduck.global.exception.CustomException;
 import com.rubberduck.global.exception.ErrorCode;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 @Service
 public class ChatResponseService {
 
     private static final String UNVERIFIED_DOCUMENT_NOTICE = "후보가 있다는 것만으로 질문에 답할 근거가 충분한 것은 아닙니다. 확인 필요: 현재 발췌 모드에서는 질문에 대한 근거 충족 여부를 판정하지 않습니다.";
+    private static final String INSUFFICIENT_EVIDENCE = "선택한 문서 범위에서 질문을 뒷받침할 근거를 찾지 못했습니다. 확인 필요: 관련 자료와 색인 상태를 확인하거나 질문을 구체화해 주세요.";
+    private static final Map<String, Object> GROUNDED_RESPONSE_FORMAT = Map.of(
+            "format", Map.of(
+                    "type", "json_schema",
+                    "name", "grounded_answer",
+                    "strict", true,
+                    "schema", Map.of(
+                            "type", "object",
+                            "additionalProperties", false,
+                            "required", List.of("answer", "source_chunk_ids"),
+                            "properties", Map.of(
+                                    "answer", Map.of("type", "string"),
+                                    "source_chunk_ids", Map.of("type", "array", "items", Map.of("type", "string"))))));
 
-    public record AiReply(String content, String type, String responseMode) {
+    public record AiReply(String content, String type, String responseMode, List<DocumentSearchResult> sources) {
+        public AiReply(String content, String type, String responseMode) { this(content, type, responseMode, List.of()); }
         public AiReply(String content, String type) { this(content, type, "llm"); }
     }
 
@@ -33,6 +52,7 @@ public class ChatResponseService {
     private final String apiKey;
     private final String model;
     private final Duration timeout;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Value("${chat.response-mode:llm}")
     private String responseMode = "llm";
@@ -65,11 +85,12 @@ public class ChatResponseService {
             Map<String, String> learningType
     ) {
         var decision = new ConversationRouter().decide(userText, conversationHistory);
-        return generateRoutedTurn(userText, user, documentContext, conversationHistory, learningType, decision);
+        return generateRoutedTurn(userText, user, documentContext, conversationHistory, learningType, decision, List.of());
     }
 
     public AiReply generateRoutedTurn(String userText, User user, String documentContext,
-            List<ChatMessage> history, Map<String, String> learningType, ConversationRouter.Decision decision) {
+            List<ChatMessage> history, Map<String, String> learningType, ConversationRouter.Decision decision,
+            List<DocumentSearchResult> candidates) {
         if (decision.simpleIntent() != null) {
             String answer = switch (decision.simpleIntent()) {
                 case IDENTITY -> "저는 Ducky예요. 학습과 디버깅을 돕고, 질문에 답하거나 스스로 풀 수 있도록 단서를 드려요.";
@@ -90,7 +111,7 @@ public class ChatResponseService {
         if (!decision.needsDocuments()) documentContext = "";
         // Retrieval owns evidence. Missing evidence never falls through to general knowledge generation.
         if (decision.needsDocuments() && (documentContext == null || documentContext.isBlank())) {
-            return new AiReply("선택한 문서 범위에서 질문을 뒷받침할 근거를 찾지 못했습니다. 확인 필요: 관련 자료와 색인 상태를 확인하거나 질문을 구체화해 주세요.", "answer", "rule");
+            return new AiReply(INSUFFICIENT_EVIDENCE, "answer", "rule");
         }
         Mode mode = decision.mode();
         if ("extractive".equals(responseMode)) {
@@ -98,7 +119,7 @@ public class ChatResponseService {
                 String guidance = "먼저 전달하려는 핵심 주장 하나를 고르고, 그 주장을 뒷받침하는 구체적인 사례나 수치가 있는지 살펴보세요.";
                 if (decision.needsDocuments()) {
                     return new AiReply(guidance + "\n\n검토할 발췌입니다. " + UNVERIFIED_DOCUMENT_NOTICE + "\n\n"
-                            + documentContext.substring(0, Math.min(documentContext.length(), 1400)), "answer", "extractive");
+                            + documentContext.substring(0, Math.min(documentContext.length(), 1400)), "answer", "extractive", candidates);
                 }
                 return new AiReply(guidance, "answer", "extractive");
             }
@@ -109,16 +130,54 @@ public class ChatResponseService {
                     default -> "그 단계의 조건을 하나만 바꿔 실행하면 결과가 어떻게 달라지나요?";
                 };
                 return new AiReply(decision.needsDocuments() ? UNVERIFIED_DOCUMENT_NOTICE + "\n\n" + clue : clue,
-                        "hint", "extractive");
+                        "hint", "extractive", decision.needsDocuments() ? candidates : List.of());
             }
             if (decision.needsDocuments()) {
                 return new AiReply("검색 후보 발췌입니다. " + UNVERIFIED_DOCUMENT_NOTICE + "\n\n"
-                        + documentContext.substring(0, Math.min(documentContext.length(), 3000)), "answer", "extractive");
+                        + documentContext.substring(0, Math.min(documentContext.length(), 3000)), "answer", "extractive", candidates);
             }
             return new AiReply("확인 필요: 현재 로컬 발췌 모드는 일반 질문에 대한 LLM 답변을 생성하지 않습니다.", "answer", "extractive");
         }
         String prompt = buildTurnPrompt(userText, user, documentContext, history, learningType, mode, decision.hintNumber());
-        return new AiReply(requestText(prompt), mode == Mode.HINT ? "hint" : "answer");
+        String type = mode == Mode.HINT ? "hint" : "answer";
+        if (decision.needsDocuments() && !candidates.isEmpty()) {
+            String instructions = """
+
+                    응답 JSON의 answer에는 사용자에게 보여줄 답변만 작성한다.
+                    source_chunk_ids에는 답변이나 힌트에 실제 사용한 발췌의 청크 ID만 문자열로 넣는다.
+                    검색 후보가 질문의 핵심에 답하지 못하면 source_chunk_ids는 빈 배열로 두고 근거 부족을 알린다.
+                    answer에는 청크 ID나 출처 목록을 반복하지 않는다. 출처는 화면이 별도로 표시한다.
+                    """;
+            return parseGroundedReply(requestText(prompt + instructions, true), type, candidates);
+        }
+        return new AiReply(requestText(prompt), type);
+    }
+
+    AiReply parseGroundedReply(String output, String type, List<DocumentSearchResult> candidates) {
+        try {
+            JsonNode result = objectMapper.readTree(output);
+            if (result == null || !result.isObject()) throw new CustomException(ErrorCode.CHAT_RESPONSE_UNAVAILABLE);
+            JsonNode answer = result.path("answer");
+            JsonNode citations = result.path("source_chunk_ids");
+            if (!answer.isString() || !citations.isArray()) {
+                throw new CustomException(ErrorCode.CHAT_RESPONSE_UNAVAILABLE);
+            }
+            var citedIds = new HashSet<String>();
+            for (JsonNode id : citations) {
+                if (!id.isString() || id.asText().isBlank()) {
+                    throw new CustomException(ErrorCode.CHAT_RESPONSE_UNAVAILABLE);
+                }
+                citedIds.add(id.asText());
+            }
+            var sources = candidates.stream().filter(candidate -> citedIds.contains(candidate.chunkId())).toList();
+            if (sources.isEmpty() || sources.size() != citedIds.size()) {
+                return new AiReply(INSUFFICIENT_EVIDENCE, "answer", "llm");
+            }
+            if (answer.asText().isBlank()) throw new CustomException(ErrorCode.CHAT_RESPONSE_UNAVAILABLE);
+            return new AiReply(answer.asText(), type, "llm", sources);
+        } catch (JacksonException exception) {
+            throw new CustomException(ErrorCode.CHAT_RESPONSE_UNAVAILABLE);
+        }
     }
 
     public String responseMode() { return responseMode; }
@@ -246,9 +305,9 @@ public class ChatResponseService {
                     ? "피드백 요청이다. 제공된 작업에서 확인되는 장점이나 개선 지점 하나를 구체적으로 짚고, "
                         + "사용자가 직접 고칠 방향을 정할 수 있도록 다음에 확인할 단서 하나를 제안한다. "
                         + "완성 답안이나 전체 수정본을 대신 제공하지 않는다. 문서가 주어지면 확인한 발췌 범위만 평가하고 "
-                        + "근거 [문서 ID, 청크 ID]를 표시한다. 확인 질문은 진행에 꼭 필요할 때 하나만 한다."
+                        + "사용한 발췌를 출처로 선택한다. 확인 질문은 진행에 꼭 필요할 때 하나만 한다."
                     : documentContext != null && !documentContext.isBlank()
-                    ? "문서 근거 답변이다. 질문에 먼저 직접 답하고 [문서 ID, 청크 ID]로 근거를 표시한다. 근거가 부족한 부분은 확인 필요라고 명시한다. 답변을 마친 뒤 관례적으로 질문을 붙이지 않는다."
+                    ? "문서 근거 답변이다. 질문에 먼저 직접 답하고 실제 사용한 발췌만 근거로 선택한다. 근거가 부족한 부분은 확인 필요라고 명시한다. 답변을 마친 뒤 관례적으로 질문을 붙이지 않는다."
                     : "직접 답변이다. 사실·개념·오류 원인 질문에 먼저 설명하고, 정보가 부족한 경우에만 필요한 정보를 묻는다. 짧은 기능 문의에는 요청한 설명만 하고 새 질문을 시작하지 않는다.";
         return """
                 너는 Ducky, 사용자의 학습과 디버깅을 돕는 파트너다. 한국어로 답한다.
@@ -424,25 +483,30 @@ public class ChatResponseService {
     }
 
     private String requestText(String prompt) {
+        return requestText(prompt, false);
+    }
+
+    private String requestText(String prompt, boolean structured) {
         if (apiKey == null || apiKey.isBlank()) {
             throw new CustomException(ErrorCode.CHAT_RESPONSE_UNAVAILABLE);
         }
 
         try {
+            var payload = new HashMap<String, Object>();
+            payload.put("model", model);
+            payload.put("input", List.of(Map.of("role", "user", "content", prompt)));
+            if (structured) payload.put("text", GROUNDED_RESPONSE_FORMAT);
             JsonNode response = webClient.post()
                     .uri("/v1/responses")
                     .header("Authorization", "Bearer " + apiKey)
-                    .bodyValue(Map.of(
-                            "model", model,
-                            "input", List.of(Map.of(
-                                    "role", "user",
-                                    "content", prompt
-                            ))
-                    ))
+                    .bodyValue(payload)
                     .retrieve()
                     .bodyToMono(JsonNode.class)
                     .block(timeout);
 
+            if (structured && (response == null || !"completed".equals(response.path("status").asText()))) {
+                throw new CustomException(ErrorCode.CHAT_RESPONSE_UNAVAILABLE);
+            }
             String outputText = extractOutputText(response);
             if (outputText.isBlank()) {
                 throw new CustomException(ErrorCode.CHAT_RESPONSE_UNAVAILABLE);
