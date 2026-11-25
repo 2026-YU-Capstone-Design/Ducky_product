@@ -15,8 +15,18 @@ public class ConversationRouter {
             "(?:(?:그럼|그러면),?)?(?:이거|그거|이것|그것)?" + REVIEW_REQUEST.pattern() + "[?!.]*");
     private static final Pattern EXERCISE_REQUEST = Pattern.compile(
             "(?:문제|연습|과제|숙제|예제)(?:를|을|도)?.*(?:풀어줘|풀어주세요|풀어줄래|해결해줘|해결해주세요)");
+    private static final Pattern DEBUG_REPORT = Pattern.compile(
+            "(?:오류|에러|error|exception)(?:가|이)?(?:나(?:요|는데|서|고|요)?|났|남|떠|뜹|발생)"
+            + "|(?:코드|반복문|함수|프로그램|스크립트)(?:가|이|는|를|을|에서)?.{0,25}(?:작동안|동작안|실행안|안돼|안되|안나와)"
+            + "|(?:러버덕(?:처럼|으로)|디버깅(?:을|좀)?(?:도와|해보|같이))");
+    private static final Pattern DEBUG_REPORT_ENGLISH = Pattern.compile(
+            "\\b(?:i (?:get|got|keep getting|am getting)|i'm getting|my (?:code|script|program) (?:throws|raises))\\b.*\\b\\w*(?:error|exception)\\b");
+    private static final Pattern DEBUG_OBSERVATION = Pattern.compile(
+            ".*(?:길이|인덱스|값|출력|반환|입력|범위|조건|줄|length|index|output|result).*(?:[0-9]|같아|달라|나와|나왔|바뀌|없어|empty|null|undefined).*"
+            + "|[-+]?\\d+(?:[.,]\\d+)?(?:이야|예요|입니다|요)?[.!]?|(?:맞아|아니|아니야|모르겠어|모르겠어요)[.!]?");
+    private static final Pattern CODE_EXPLANATION = Pattern.compile("^(?:이|그)코드(?:는|가|에서)?왜(?:오류|에러)(?:가|이)?나[?？]");
 
-    public enum Mode { DIRECT, HINT, DOCUMENT, REVIEW, CLARIFY }
+    public enum Mode { DIRECT, HINT, DOCUMENT, REVIEW, CLARIFY, DEBUG }
     public enum SimpleIntent { IDENTITY, GREETING, THANKS, HINT_FEATURE }
     public record Decision(Mode mode, boolean needsDocuments, String searchQuery, int hintNumber, SimpleIntent simpleIntent) {}
 
@@ -46,7 +56,7 @@ public class ConversationRouter {
         boolean hint = !directRequested && !review && (contains(value, "힌트", "hint", "정답 말고", "답을 알려주지", "질문으로 유도")
                 || contains(compact, "단서하나만", "단서만줘", "단서만알려", "같이생각해보자")
                 || EXERCISE_REQUEST.matcher(compact).find()
-                || compact.matches(".*(?:스스로|혼자).*(?:풀어보고싶|찾아보고싶|풀고싶).*"));
+                || compact.matches(".*(?:스스로|혼자|직접).*(?:풀어보고싶|찾아보고싶|풀고싶|찾고싶|찾게도와|풀게도와).*"));
         boolean reviewWithoutTarget = BARE_REVIEW_REQUEST.matcher(compact).matches();
         boolean general = compact.matches(".*(문서|자료|강의)(와|과|랑)?(관계없이|상관없이|무관하게).*" )
                 || contains(compact, "자료말고일반", "문서말고일반", "일반지식으로", "일반적인질문");
@@ -58,12 +68,20 @@ public class ConversationRouter {
         boolean document = !general && (explicitDocumentContext || contains(value, "문서", "자료", "강의", "업로드", "pdf", "document")
                 || ((followUp || reviewWithoutTarget) && last != null && ("DOCUMENT".equals(last.getResponseStrategy())
                     || "INSUFFICIENT_EVIDENCE".equals(last.getResponseStrategy()) || !last.getSources().isEmpty())));
+        boolean continuesDebug = last != null && Mode.DEBUG.name().equals(last.getResponseStrategy())
+                && DEBUG_OBSERVATION.matcher(compact).matches();
         boolean unclear = value.isBlank() || (compact.length() <= 2 && compact.matches("[a-z0-9]+")
-                && !List.of("hi", "ai", "os", "db", "js", "ts", "go", "c", "r", "ui", "ux", "ip", "io", "ml", "dl", "ci", "cd", "vm").contains(compact))
-                || (subject.isBlank() && (missingReferent(value) || (reviewWithoutTarget && !document)
+                && !continuesDebug && !List.of("hi", "ai", "os", "db", "js", "ts", "go", "c", "r", "ui", "ux", "ip", "io", "ml", "dl", "ci", "cd", "vm").contains(compact))
+                || (subject.isBlank() && !continuesDebug && (missingReferent(value) || (reviewWithoutTarget && !document)
                     || compact.matches("(왜|어떻게|다음|계속|더|모르겠어|안돼|도와줘)(왜|뭐야|설명해|은|요|해|해줘|\\?|!|\\.)*")));
         if (unclear) return new Decision(Mode.CLARIFY, false, text, number, null);
         String query = !general && followUp && !subject.isBlank() ? subject + "\n" + text : text;
+        boolean conceptQuestion = contains(compact, "뭐야", "뭐예요", "뭔가요", "무엇", "뜻이", "의미", "왜발생", "왜나는거")
+                || value.matches("^(?:what is|what does|what's|define)\\b.*") || CODE_EXPLANATION.matcher(compact).find();
+        if (!directRequested && !review && !document && !conceptQuestion && (DEBUG_REPORT.matcher(compact).find()
+                || DEBUG_REPORT_ENGLISH.matcher(value).find() || continuesDebug)) {
+            return new Decision(Mode.DEBUG, false, text, number, null);
+        }
         return new Decision(hint ? Mode.HINT : review ? Mode.REVIEW : document ? Mode.DOCUMENT : Mode.DIRECT,
                 document, query, number, null);
     }
