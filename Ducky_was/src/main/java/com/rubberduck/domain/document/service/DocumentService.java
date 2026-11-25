@@ -179,7 +179,7 @@ public class DocumentService {
 
         return results.stream()
                 .limit(3)
-                .map(result -> "[문서 " + result.documentId() + ", 청크 " + result.chunkId() + "] "
+                .map(result -> "[source_chunk_id: " + result.chunkId() + "] "
                         + result.title() + " / " + (result.headingPath() == null ? "" : result.headingPath())
                         + "\n" + truncate(result.content(), 1400))
                 .reduce((left, right) -> left + "\n" + right)

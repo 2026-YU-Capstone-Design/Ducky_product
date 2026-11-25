@@ -27,18 +27,6 @@ public class ChatResponseService {
 
     private static final String UNVERIFIED_DOCUMENT_NOTICE = "후보가 있다는 것만으로 질문에 답할 근거가 충분한 것은 아닙니다. 확인 필요: 현재 발췌 모드에서는 질문에 대한 근거 충족 여부를 판정하지 않습니다.";
     private static final String INSUFFICIENT_EVIDENCE = "선택한 문서 범위에서 질문을 뒷받침할 근거를 찾지 못했습니다. 확인 필요: 관련 자료와 색인 상태를 확인하거나 질문을 구체화해 주세요.";
-    private static final Map<String, Object> GROUNDED_RESPONSE_FORMAT = Map.of(
-            "format", Map.of(
-                    "type", "json_schema",
-                    "name", "grounded_answer",
-                    "strict", true,
-                    "schema", Map.of(
-                            "type", "object",
-                            "additionalProperties", false,
-                            "required", List.of("answer", "source_chunk_ids"),
-                            "properties", Map.of(
-                                    "answer", Map.of("type", "string"),
-                                    "source_chunk_ids", Map.of("type", "array", "items", Map.of("type", "string"))))));
 
     public record AiReply(String content, String type, String responseMode, List<DocumentSearchResult> sources) {
         public AiReply(String content, String type, String responseMode) { this(content, type, responseMode, List.of()); }
@@ -144,13 +132,30 @@ public class ChatResponseService {
             String instructions = """
 
                     응답 JSON의 answer에는 사용자에게 보여줄 답변만 작성한다.
-                    source_chunk_ids에는 답변이나 힌트에 실제 사용한 발췌의 청크 ID만 문자열로 넣는다.
+                    질문에 답할 근거가 있으면 답변이나 힌트에 실제 사용한 발췌의 source_chunk_id를 source_chunk_ids에 넣는다.
+                    발췌 앞의 source_chunk_id 값을 그대로 복사한다. 문서 ID, 블록 ID, 쪽 번호는 넣지 않는다.
                     검색 후보가 질문의 핵심에 답하지 못하면 source_chunk_ids는 빈 배열로 두고 근거 부족을 알린다.
                     answer에는 청크 ID나 출처 목록을 반복하지 않는다. 출처는 화면이 별도로 표시한다.
                     """;
-            return parseGroundedReply(requestText(prompt + instructions, true), type, candidates);
+            return parseGroundedReply(requestText(prompt + instructions, groundedResponseFormat(candidates)), type, candidates);
         }
         return new AiReply(requestText(prompt), type);
+    }
+
+    static Map<String, Object> groundedResponseFormat(List<DocumentSearchResult> candidates) {
+        List<String> allowedIds = candidates.stream().map(DocumentSearchResult::chunkId).distinct().toList();
+        return Map.of("format", Map.of(
+                "type", "json_schema",
+                "name", "grounded_answer",
+                "strict", true,
+                "schema", Map.of(
+                        "type", "object",
+                        "additionalProperties", false,
+                        "required", List.of("answer", "source_chunk_ids"),
+                        "properties", Map.of(
+                                "answer", Map.of("type", "string"),
+                                "source_chunk_ids", Map.of("type", "array", "items",
+                                        Map.of("type", "string", "enum", allowedIds))))));
     }
 
     AiReply parseGroundedReply(String output, String type, List<DocumentSearchResult> candidates) {
@@ -483,10 +488,10 @@ public class ChatResponseService {
     }
 
     private String requestText(String prompt) {
-        return requestText(prompt, false);
+        return requestText(prompt, Map.of());
     }
 
-    private String requestText(String prompt, boolean structured) {
+    private String requestText(String prompt, Map<String, Object> responseFormat) {
         if (apiKey == null || apiKey.isBlank()) {
             throw new CustomException(ErrorCode.CHAT_RESPONSE_UNAVAILABLE);
         }
@@ -495,7 +500,7 @@ public class ChatResponseService {
             var payload = new HashMap<String, Object>();
             payload.put("model", model);
             payload.put("input", List.of(Map.of("role", "user", "content", prompt)));
-            if (structured) payload.put("text", GROUNDED_RESPONSE_FORMAT);
+            if (!responseFormat.isEmpty()) payload.put("text", responseFormat);
             JsonNode response = webClient.post()
                     .uri("/v1/responses")
                     .header("Authorization", "Bearer " + apiKey)
@@ -504,7 +509,7 @@ public class ChatResponseService {
                     .bodyToMono(JsonNode.class)
                     .block(timeout);
 
-            if (structured && (response == null || !"completed".equals(response.path("status").asText()))) {
+            if (!responseFormat.isEmpty() && (response == null || !"completed".equals(response.path("status").asText()))) {
                 throw new CustomException(ErrorCode.CHAT_RESPONSE_UNAVAILABLE);
             }
             String outputText = extractOutputText(response);
