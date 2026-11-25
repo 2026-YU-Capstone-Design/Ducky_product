@@ -87,7 +87,17 @@ def extract_pdf_pages(document):
             if text and not PAGE_NUMBER.fullmatch(text):
                 scans[index] = ""
                 recover[index] = False
-            continue
+                continue
+            if not any(marks.values()):
+                continue
+            try:
+                if _is_blank(page):
+                    continue
+            except (ValueError, RuntimeError):
+                pass
+            # Undecodable visible glyphs need the same OCR/vision path as a
+            # raster scan. Bbox logs alone can also describe fully clipped text;
+            # the rendered blank check above keeps those pages blank.
         try:
             scans[index] = read_scan(page) if time.monotonic() < ocr_deadline else ""
         except PdfOcrError:
@@ -126,10 +136,14 @@ def extract_pdf_pages(document):
         supplement = recover[index]
         try:
             text = reader.read(document[index], supplement=supplement, deadline=vision_deadline)
-        except PdfVisionError:
+        except PdfVisionError as error:
             if not supplement:
                 raise
             images_not_enriched = True
+            if str(error) in {"PDF_VISION_UNAVAILABLE", "PDF_VISION_LIMIT"}:
+                # The provider/deadline is shared by the remaining optional
+                # pages; retrying each one cannot recover a page-specific issue.
+                break
             continue
         if text:
             page = pages[index]
