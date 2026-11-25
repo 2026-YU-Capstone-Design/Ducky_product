@@ -184,7 +184,8 @@ public class DocumentService {
         if (english.isBlank()) return original;
 
         var combined = new HashMap<>(original);
-        searchScoring.scores(candidates, english).forEach((chunk, score) -> combined.merge(chunk, score, Math::max));
+        searchScoring.scoreEnglishTranslation(candidates, english)
+                .forEach((chunk, score) -> combined.merge(chunk, score, Math::max));
         return combined;
     }
 

@@ -10,7 +10,9 @@ import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import org.apache.lucene.analysis.en.EnglishAnalyzer;
 import org.springframework.stereotype.Service;
+import org.tartarus.snowball.ext.EnglishStemmer;
 
 import com.rubberduck.domain.document.entity.DocumentChunk;
 
@@ -26,7 +28,15 @@ public class Bm25SearchService {
     private record ChunkTerms(Long id, int length, Map<String, Integer> matches) {}
 
     public Map<Long, Double> scores(List<DocumentChunk> chunks, String query) {
-        var queryTerms = terms(query).keySet();
+        return scores(chunks, query, null);
+    }
+
+    public Map<Long, Double> scoreEnglishTranslation(List<DocumentChunk> chunks, String query) {
+        return scores(chunks, query, new EnglishStemmer());
+    }
+
+    private Map<Long, Double> scores(List<DocumentChunk> chunks, String query, EnglishStemmer stemmer) {
+        var queryTerms = terms(query, stemmer).keySet();
         if (queryTerms.isEmpty()) return Map.of();
 
         var corpus = new ArrayList<ChunkTerms>(chunks.size());
@@ -34,7 +44,7 @@ public class Bm25SearchService {
         long totalLength = 0;
         for (DocumentChunk chunk : chunks) {
             String heading = chunk.getHeadingPath() == null ? "" : chunk.getHeadingPath();
-            var frequencies = terms(heading + "\n" + chunk.getContent());
+            var frequencies = terms(heading + "\n" + chunk.getContent(), stemmer);
             int length = frequencies.values().stream().mapToInt(Integer::intValue).sum();
             if (length == 0) continue;
             totalLength += length;
@@ -90,11 +100,17 @@ public class Bm25SearchService {
         return english > HANGUL_WORD.matcher(text).results().count();
     }
 
-    private Map<String, Integer> terms(String text) {
+    private Map<String, Integer> terms(String text, EnglishStemmer stemmer) {
         var terms = new HashMap<String, Integer>();
         var words = WORD.matcher(text.toLowerCase(Locale.ROOT));
         while (words.find()) {
             String token = words.group();
+            if (stemmer != null && ENGLISH_WORD.matcher(token).matches()) {
+                if (EnglishAnalyzer.getDefaultStopSet().contains(token)) continue;
+                stemmer.setCurrent(token);
+                stemmer.stem();
+                token = stemmer.getCurrent();
+            }
             terms.merge("w:" + token, 1, Integer::sum);
             if (HANGUL_WORD.matcher(token).matches()) {
                 for (int i = 0; i < token.length() - 1; i++) {
