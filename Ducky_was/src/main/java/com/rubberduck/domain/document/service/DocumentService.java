@@ -1,10 +1,12 @@
 package com.rubberduck.domain.document.service;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
-import java.io.IOException;
+import java.util.Map;
 
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Value;
@@ -12,6 +14,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.rubberduck.domain.chat.service.ChatResponseService;
 import com.rubberduck.domain.document.dto.DocumentResponse;
 import com.rubberduck.domain.document.dto.DocumentSearchResponse;
 import com.rubberduck.domain.document.dto.DocumentSearchResult;
@@ -41,6 +44,7 @@ public class DocumentService {
     private final DocumentChunker documentChunker;
     private final EmbeddingService embeddingService;
     private final Bm25SearchService searchScoring;
+    private final ChatResponseService chatResponseService;
     private final LocalDocumentStore documentStore;
     private final CloudDocumentSettings cloudSettings;
     private final CloudDocumentUploadService cloudUpload;
@@ -162,7 +166,7 @@ public class DocumentService {
         var candidates = documentIds == null
                 ? chunkRepository.findSearchableByUser(user)
                 : chunkRepository.findSearchableByUserAndDocuments(user, documentIds);
-        var scores = searchScoring.scores(candidates, normalizedQuery);
+        var scores = scoreCandidates(candidates, normalizedQuery);
         return candidates.stream()
                 .filter(chunk -> scores.containsKey(chunk.getId()))
                 .sorted(Comparator.comparingDouble((DocumentChunk chunk) -> scores.get(chunk.getId())).reversed()
@@ -170,6 +174,19 @@ public class DocumentService {
                 .limit(resultLimit)
                 .map(chunk -> toSource(chunk, scores.get(chunk.getId())))
                 .toList();
+    }
+
+    private Map<Long, Double> scoreCandidates(List<DocumentChunk> candidates, String query) {
+        var original = searchScoring.scores(candidates, query);
+        if (!searchScoring.needsEnglishQuery(candidates, query, original)) return original;
+
+        String english = chatResponseService.translateDocumentQuery(query);
+        if (english.isBlank()) return original;
+
+        var combined = new HashMap<>(original);
+        searchScoring.scoreEnglishTranslation(candidates, english)
+                .forEach((chunk, score) -> combined.merge(chunk, score, Math::max));
+        return combined;
     }
 
     public String toPromptContext(List<DocumentSearchResult> results) {
