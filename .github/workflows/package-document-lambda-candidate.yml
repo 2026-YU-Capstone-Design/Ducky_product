@@ -1,0 +1,65 @@
+name: Build document Lambda candidate
+
+on:
+  push:
+    branches:
+      - ci/document-lambda-package-0af45ec
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the release source
+        run: |
+          test -z "$(git diff 0af45ec59e2d0ea6c8917e304ddcfa873fd8053c -- Ducky_rag)"
+          docker build --platform linux/amd64 --provenance=false --sbom=false \
+            --label org.opencontainers.image.revision=0af45ec59e2d0ea6c8917e304ddcfa873fd8053c \
+            --file Ducky_rag/Dockerfile.lambda --tag ducky-document-learning-dev:0af45ec Ducky_rag
+      - name: Verify OCR and image fallback in the image
+        run: |
+          docker run --network none --rm -i --entrypoint python ducky-document-learning-dev:0af45ec - <<'PY'
+          from pathlib import Path
+          import os
+          import pymupdf
+          from ducky_rag.pipeline import process_document
+          from ducky_rag import pdf_vision
+          from ducky_rag.lambda_handler import handler
+          assert callable(handler)
+          folder = Path(os.environ["TESSDATA_PREFIX"])
+          assert all((folder / (lang + ".traineddata")).is_file() for lang in ("kor", "eng"))
+          with pymupdf.open() as pdf:
+              page = pdf.new_page()
+              page.insert_text((72, 90), "Native text stays searchable.")
+              for x in (90, 150, 210):
+                  page.draw_rect(pymupdf.Rect(x, 151, x + 18, 205), fill=(0, 0.4, 0.8))
+              data = pdf.tobytes()
+          baseline = process_document(data, "1", "pdf")
+          assert baseline["warnings"] == ["IMAGES_NOT_ENRICHED"]
+          assert baseline["chunks"][0]["pageNumber"] == 1
+          with pymupdf.open() as source, pymupdf.open() as scanned:
+              page = source.new_page()
+              page.insert_text((78, 110), "The release verification token is blue.", fontsize=26)
+              target = scanned.new_page()
+              target.insert_image(target.rect, pixmap=page.get_pixmap(matrix=pymupdf.Matrix(2, 2)))
+              result = process_document(scanned.tobytes(), "2", "pdf")
+          assert "OCR_TEXT_EXTRACTED" in result["warnings"]
+          assert any("verification token is blue" in row["content"] and row["pageNumber"] == 1
+                     for row in result["chunks"])
+          PY
+      - name: Export the verified image
+        run: |
+          docker save ducky-document-learning-dev:0af45ec | gzip -1 > ducky-document-learning-dev-0af45ec.tar.gz
+          sha256sum ducky-document-learning-dev-0af45ec.tar.gz > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ducky-document-learning-dev-0af45ec
+          path: |
+            ducky-document-learning-dev-0af45ec.tar.gz
+            SHA256SUMS
+          compression-level: 0
+          retention-days: 1
