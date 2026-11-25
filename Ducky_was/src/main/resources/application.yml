@@ -74,3 +74,8 @@ document:
 
 chat:
   response-mode: ${CHAT_RESPONSE_MODE:llm}
+
+device:
+  commands:
+    pending-timeout: ${DEVICE_COMMAND_PENDING_TIMEOUT:PT2M}
+    claimed-timeout: ${DEVICE_COMMAND_CLAIMED_TIMEOUT:PT5M}
