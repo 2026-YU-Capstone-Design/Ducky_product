@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.io.IOException;
 
 import org.springframework.stereotype.Service;
@@ -26,6 +25,7 @@ import com.rubberduck.global.exception.ErrorCode;
 
 import lombok.RequiredArgsConstructor;
 import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 @Service
@@ -40,7 +40,7 @@ public class DocumentService {
     private final TextExtractionService textExtractionService;
     private final DocumentChunker documentChunker;
     private final EmbeddingService embeddingService;
-    private final SparseEmbeddingService sparseEmbeddingService;
+    private final Bm25SearchService searchScoring;
     private final LocalDocumentStore documentStore;
     private final CloudDocumentSettings cloudSettings;
     private final CloudDocumentUploadService cloudUpload;
@@ -156,17 +156,19 @@ public class DocumentService {
     private List<DocumentSearchResult> searchResults(User user, String query, Integer limit, List<Long> documentIds) {
         String normalizedQuery = requireQuery(query);
         int resultLimit = normalizeLimit(limit);
-        double[] queryEmbedding = embeddingService.embed(normalizedQuery);
-        Map<String, Double> sparseQuery = sparseEmbeddingService.embed(normalizedQuery);
+        if (documentIds != null && documentIds.isEmpty()) return List.of();
         if (documentIds != null) documentIds.forEach(id -> getUserDocument(user, id));
 
-        return chunkRepository.findByDocument_UserAndDocument_RagEnabledTrue(user).stream()
-                .filter(chunk -> "indexed".equals(chunk.getDocument().getIndexingStatus()))
-                .filter(chunk -> documentIds == null || documentIds.contains(chunk.getDocument().getId()))
-                .map(chunk -> toSearchResult(chunk, queryEmbedding, sparseQuery))
-                .filter(result -> result.score() >= 0.08d)
-                .sorted(Comparator.comparingDouble(DocumentSearchResult::score).reversed())
+        var candidates = documentIds == null
+                ? chunkRepository.findSearchableByUser(user)
+                : chunkRepository.findSearchableByUserAndDocuments(user, documentIds);
+        var scores = searchScoring.scores(candidates, normalizedQuery);
+        return candidates.stream()
+                .filter(chunk -> scores.containsKey(chunk.getId()))
+                .sorted(Comparator.comparingDouble((DocumentChunk chunk) -> scores.get(chunk.getId())).reversed()
+                        .thenComparing(DocumentChunk::getId))
                 .limit(resultLimit)
+                .map(chunk -> toSource(chunk, scores.get(chunk.getId())))
                 .toList();
     }
 
@@ -206,14 +208,8 @@ public class DocumentService {
         return List.copyOf(sources);
     }
 
-    private DocumentSearchResult toSearchResult(DocumentChunk chunk, double[] queryEmbedding, Map<String, Double> sparseQuery) {
-        double score = SparseEmbeddingService.MODEL.equals(chunk.getEmbeddingModel())
-                ? sparseEmbeddingService.score(sparseQuery, chunk.getEmbeddingJson())
-                : embeddingService.cosine(queryEmbedding, embeddingService.fromJson(chunk.getEmbeddingJson()));
-        return toSource(chunk, score);
-    }
-
     private DocumentSearchResult toSource(DocumentChunk chunk, double score) {
+        JsonNode provenance = readProvenance(chunk);
         return new DocumentSearchResult(
                 String.valueOf(chunk.getDocument().getId()),
                 String.valueOf(chunk.getId()),
@@ -222,19 +218,41 @@ public class DocumentService {
                 score,
                 chunk.getBlockId(),
                 chunk.getHeadingPath(),
-                pageNumber(chunk)
+                pageNumber(provenance),
+                blockIds(provenance, chunk.getBlockId())
         );
     }
 
-    private Integer pageNumber(DocumentChunk chunk) {
+    private JsonNode readProvenance(DocumentChunk chunk) {
         String provenance = chunk.getProvenanceJson();
         if (provenance == null || provenance.isBlank()) return null;
         try {
-            return DocumentResultValidator.page(objectMapper.readTree(provenance).path("pageNumber"));
+            return objectMapper.readTree(provenance);
+        } catch (JacksonException ignored) {
+            return null;
+        }
+    }
+
+    private Integer pageNumber(JsonNode provenance) {
+        if (provenance == null) return null;
+        try {
+            return DocumentResultValidator.page(provenance.path("pageNumber"));
         } catch (JacksonException | IllegalArgumentException ignored) {
             // An older chunk can still be cited without a structured page number.
             return null;
         }
+    }
+
+    private List<String> blockIds(JsonNode provenance, String primaryBlockId) {
+        if (provenance == null || primaryBlockId == null) return List.of();
+        JsonNode ids = provenance.path("blockIds");
+        if (!ids.isArray() || !primaryBlockId.equals(ids.path(0).asText())) return List.of();
+        List<String> result = new ArrayList<>(ids.size());
+        for (JsonNode id : ids) {
+            if (!id.isString() || id.asText().isBlank()) return List.of();
+            result.add(id.asText());
+        }
+        return result;
     }
 
     private LearningDocument getUserDocument(User user, Long documentId) {

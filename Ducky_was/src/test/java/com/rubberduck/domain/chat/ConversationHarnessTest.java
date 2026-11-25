@@ -105,7 +105,10 @@ class ConversationHarnessTest extends ApiFlowTest {
         for (int i = 0; i < pageContents.length; i++) {
             var chunk = DocumentChunk.create(pdf, i, pageContents[i], embeddings.serialize(pageContents[i]));
             chunk.setEmbeddingModel(SparseEmbeddingService.MODEL);
-            chunk.setProvenanceJson(new ObjectMapper().createObjectNode().put("pageNumber", i + 1).toString());
+            chunk.setBlockId("page-" + (i + 1));
+            var provenance = new ObjectMapper().createObjectNode().put("pageNumber", i + 1);
+            if (i == 0) provenance.putArray("blockIds").add("page-1").add("body-1");
+            chunk.setProvenanceJson(provenance.toString());
             chunks.save(chunk);
         }
         for (int i = 0; i < pageContents.length; i++) {
@@ -113,6 +116,8 @@ class ConversationHarnessTest extends ApiFlowTest {
             var source = response.path("sources").get(0);
             assertThat(source.path("documentId").asText()).isEqualTo(pdf.getId().toString());
             assertThat(source.path("pageNumber").asInt()).isEqualTo(i + 1);
+            assertThat(source.path("blockIds").size()).isEqualTo(i == 0 ? 2 : 1);
+            assertThat(source.path("blockIds").get(0).asText()).isEqualTo("page-" + (i + 1));
         }
         em.flush();
         em.clear();
@@ -120,6 +125,7 @@ class ConversationHarnessTest extends ApiFlowTest {
                         .header("Authorization", "Bearer " + tokens.issue(user.getId())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.messages[1].sources[0].pageNumber").value(1))
+                .andExpect(jsonPath("$.data.messages[1].sources[0].blockIds[1]").value("body-1"))
                 .andExpect(jsonPath("$.data.messages[3].sources[0].pageNumber").value(2));
     }
 
