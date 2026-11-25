@@ -38,6 +38,7 @@ function load(relative) {
 load('lib/api/client.ts');
 const docs = load('lib/api/documents.ts');
 const chat = load('lib/api/chat.ts');
+const recording = load('lib/api/recording-command.ts');
 const { toChatMessage } = load('lib/chat/transformers.ts');
 const originalFetch = global.fetch;
 const originalTimeout = global.setTimeout;
@@ -73,6 +74,28 @@ afterEach(() => {
   delete global.window;
 });
 
+test('recording receipts recover after timeout and ignore delayed older responses', () => {
+  const pending = { id: '21', status: 'PENDING', errorMessage: null };
+  const claimed = { ...pending, status: 'CLAIMED' };
+  const failed = { ...pending, status: 'FAILED', errorMessage: 'timed out' };
+  assert.equal(recording.isRecordingCommandActive(recording.reconcileRecordingCommand(null, pending)), true);
+  assert.deepEqual(recording.reconcileRecordingCommand(claimed, pending), claimed);
+  assert.equal(recording.isRecordingCommandActive(recording.reconcileRecordingCommand(claimed, failed)), false);
+  const retry = { ...pending, id: '22' };
+  assert.deepEqual(recording.reconcileRecordingCommand(retry, failed), retry);
+  assert.deepEqual(recording.reconcileRecordingCommand(retry, null), retry);
+  assert.deepEqual(recording.reconcileRecordingCommand(failed, claimed), failed);
+});
+
+test('each completed recording refreshes history once even when consecutive polls skip active statuses', () => {
+  const first = { id: '21', status: 'COMPLETED' };
+  const second = { id: '22', status: 'COMPLETED' };
+  assert.equal(recording.shouldRefreshRecordingMessages(null, first), true);
+  assert.equal(recording.shouldRefreshRecordingMessages(first, first), false);
+  assert.equal(recording.shouldRefreshRecordingMessages(first, second), true);
+  assert.equal(recording.shouldRefreshRecordingMessages(second, recording.reconcileRecordingCommand(second, first)), false);
+});
+
 test('upload uses authenticated multipart and preserves the server document ID', async () => {
   login();
   global.fetch = async (url, options) => {
@@ -90,11 +113,13 @@ test('upload uses authenticated multipart and preserves the server document ID',
 test('processing and processed continue polling until indexed; processed is never searchable', async () => {
   login();
   global.setTimeout = (fn) => originalTimeout(fn, 0);
-  const states = ['processing', 'processed', 'indexed'];
+  const states = ['processing', 'processing', 'processed', 'indexed'];
   let calls = 0;
   global.fetch = async () => response({ id: '19', ragEnabled: true, indexingStatus: states[calls++] });
-  const result = await docs.waitForDocument({ id: '19', indexingStatus: 'pending' });
-  assert.equal(calls, 3);
+  const progress = [];
+  const result = await docs.waitForDocument({ id: '19', indexingStatus: 'pending' }, undefined, status => progress.push(status));
+  assert.equal(calls, 4);
+  assert.deepEqual(progress, ['pending', 'processing', 'processed']);
   assert.equal(result.indexingStatus, 'indexed');
   assert.equal(docs.isDocumentSearchable({ indexingStatus: 'processed', ragEnabled: true }), false);
   assert.equal(docs.isDocumentSearchable({ indexingStatus: 'indexed', ragEnabled: false }), false);

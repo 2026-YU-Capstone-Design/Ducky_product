@@ -20,8 +20,14 @@ import {
   getLatestDeviceCommand,
   listDevices,
   startRaspberryRecording,
+  type DeviceCommandResponse,
   type DeviceResponse,
 } from "@/lib/api/devices";
+import {
+  isRecordingCommandActive,
+  reconcileRecordingCommand,
+  shouldRefreshRecordingMessages,
+} from "@/lib/api/recording-command";
 import { ChatBubble } from "./ChatBubble";
 import { ChatInput } from "./ChatInput";
 import { HintPanel } from "./HintPanel";
@@ -47,7 +53,8 @@ export function ChatPage() {
   const [raspberryError, setRaspberryError] = useState<string | null>(null);
   const [isRaspberryCommandPending, setIsRaspberryCommandPending] = useState(false);
   const [isStartingRaspberry, setIsStartingRaspberry] = useState(false);
-  const lastRaspberryCommandStatusRef = useRef<string | null>(null);
+  const lastRaspberryCommandRef = useRef<DeviceCommandResponse | null>(null);
+  const startingRaspberryRef = useRef(false);
   const previousRaspberryStatusRef = useRef<string | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const chat = useChatSession();
@@ -108,23 +115,40 @@ export function ChatPage() {
     isLoadingSession ||
     !isReady;
 
+  const applyRaspberryCommand = useCallback((incoming: DeviceCommandResponse | null) => {
+    const previous = lastRaspberryCommandRef.current?.deviceId === raspberryDeviceId
+      ? lastRaspberryCommandRef.current : null;
+    const command = reconcileRecordingCommand(previous, incoming);
+    lastRaspberryCommandRef.current = command;
+    setIsRaspberryCommandPending(isRecordingCommandActive(command));
+    if (command?.status === "FAILED") {
+      setRaspberryError(command.errorMessage ?? "라즈베리 녹음 명령을 처리하지 못했습니다.");
+    } else {
+      setRaspberryError(null);
+    }
+    if (shouldRefreshRecordingMessages(previous, command)) {
+      void refreshMessages();
+    }
+  }, [raspberryDeviceId, refreshMessages]);
+
   const handleRaspberryTalk = useCallback(async () => {
-    if (!raspberryDeviceId || !activeSession.id || isRaspberryButtonDisabled) {
+    if (!raspberryDeviceId || !activeSession.id || isRaspberryButtonDisabled || startingRaspberryRef.current) {
       return;
     }
 
     setRaspberryError(null);
+    startingRaspberryRef.current = true;
     setIsStartingRaspberry(true);
 
     try {
-      await startRaspberryRecording(raspberryDeviceId, activeSession.id);
-      setIsRaspberryCommandPending(true);
+      applyRaspberryCommand(await startRaspberryRecording(raspberryDeviceId, activeSession.id));
     } catch (startError) {
       setRaspberryError(getRaspberryErrorMessage(startError));
+    } finally {
+      startingRaspberryRef.current = false;
       setIsStartingRaspberry(false);
-      setIsRaspberryCommandPending(false);
     }
-  }, [activeSession.id, isRaspberryButtonDisabled, raspberryDeviceId]);
+  }, [activeSession.id, applyRaspberryCommand, isRaspberryButtonDisabled, raspberryDeviceId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -177,7 +201,6 @@ export function ChatPage() {
             (device: DeviceResponse) => device.id === raspberryDeviceId,
           );
           setRaspberryDeviceStatus(raspberry?.status ?? null);
-          setRaspberryError(null);
         })
         .catch((pollError) => {
           setRaspberryError(getRaspberryErrorMessage(pollError));
@@ -192,53 +215,29 @@ export function ChatPage() {
       return;
     }
 
-    const pollCommand = () => {
-      void getLatestDeviceCommand(raspberryDeviceId)
-        .then(async (command) => {
-          if (!command) {
-            return;
-          }
-
-          const isActive =
-            command.status === "PENDING" || command.status === "CLAIMED";
-          setIsRaspberryCommandPending(isActive);
-
-          if (isActive) {
-            setIsStartingRaspberry(false);
-          }
-
-          if (
-            command.status === "COMPLETED" &&
-            lastRaspberryCommandStatusRef.current !== "COMPLETED"
-          ) {
-            await refreshMessages();
-            setIsStartingRaspberry(false);
-            setIsRaspberryCommandPending(false);
-          }
-
-          if (command.status === "FAILED") {
-            setRaspberryError(
-              command.errorMessage ??
-                "라즈베리 녹음 명령을 처리하지 못했습니다.",
-            );
-            setIsStartingRaspberry(false);
-            setIsRaspberryCommandPending(false);
-          }
-
-          lastRaspberryCommandStatusRef.current = command.status;
-        })
-        .catch((pollError) => {
-          setRaspberryError(getRaspberryErrorMessage(pollError));
-          setIsStartingRaspberry(false);
-          setIsRaspberryCommandPending(false);
-        });
+    let cancelled = false;
+    let polling = false;
+    const pollCommand = async () => {
+      if (polling || startingRaspberryRef.current) return;
+      polling = true;
+      try {
+        const command = await getLatestDeviceCommand(raspberryDeviceId);
+        if (!cancelled && !startingRaspberryRef.current) applyRaspberryCommand(command);
+      } catch (pollError) {
+        if (!cancelled) setRaspberryError(getRaspberryErrorMessage(pollError));
+      } finally {
+        polling = false;
+      }
     };
 
-    pollCommand();
-    const timer = window.setInterval(pollCommand, 1500);
+    void pollCommand();
+    const timer = window.setInterval(() => void pollCommand(), 1500);
 
-    return () => window.clearInterval(timer);
-  }, [activeSession.id, raspberryDeviceId, refreshMessages]);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [activeSession.id, applyRaspberryCommand, raspberryDeviceId]);
 
   useEffect(() => {
     const previousStatus = previousRaspberryStatusRef.current;
@@ -248,8 +247,6 @@ export function ChatPage() {
       raspberryDeviceStatus === "IDLE"
     ) {
       void refreshMessages();
-      setIsStartingRaspberry(false);
-      setIsRaspberryCommandPending(false);
     }
 
     previousRaspberryStatusRef.current = raspberryDeviceStatus;

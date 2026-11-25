@@ -253,12 +253,24 @@ export function useChatSession({ enabled = true }: UseChatSessionOptions = {}) {
         const attachedDocumentIds: number[] = [];
         for (const file of files ?? []) {
           signal?.throwIfAborted();
-          setProcessingMessage(`${file.name} 문서를 처리하고 있습니다.`);
-          if (file.size > 20 * 1024 * 1024) throw new Error("파일은 20MB 이하로 올려 주세요.");
-          const document = await waitForDocument(await uploadDocument(file), signal);
+          if (file.size > 20 * 1024 * 1024)
+            throw new Error("파일은 20MB 이하로 올려 주세요.");
+
+          setProcessingMessage(`${file.name} 업로드 중`);
+          const document = await waitForDocument(
+            await uploadDocument(file, signal),
+            signal,
+            (stage) => {
+              const label = stage === "pending" ? "처리 대기 중"
+                : stage === "processed" ? "검색 색인 반영 중" : "문서 변환 중";
+              setProcessingMessage(`${file.name} · ${label}`);
+            },
+          );
+
           attachedDocumentIds.push(Number(document.id));
         }
-        setProcessingMessage(null);
+
+        setProcessingMessage(attachedDocumentIds.length ? "첨부 자료를 바탕으로 답변을 작성하고 있습니다." : null);
         signal?.throwIfAborted();
         const turn = await sendChatMessage({
           conversationId: activeSession.id,
