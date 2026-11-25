@@ -39,7 +39,7 @@ load('lib/api/client.ts');
 const docs = load('lib/api/documents.ts');
 const chat = load('lib/api/chat.ts');
 const recording = load('lib/api/recording-command.ts');
-const { toChatMessage } = load('lib/chat/transformers.ts');
+const { mergeChatMessages, toChatMessage } = load('lib/chat/transformers.ts');
 const originalFetch = global.fetch;
 const originalTimeout = global.setTimeout;
 
@@ -87,13 +87,33 @@ test('recording receipts recover after timeout and ignore delayed older response
   assert.deepEqual(recording.reconcileRecordingCommand(failed, claimed), failed);
 });
 
-test('each completed recording refreshes history once even when consecutive polls skip active statuses', () => {
-  const first = { id: '21', status: 'COMPLETED' };
-  const second = { id: '22', status: 'COMPLETED' };
-  assert.equal(recording.shouldRefreshRecordingMessages(null, first), true);
-  assert.equal(recording.shouldRefreshRecordingMessages(first, first), false);
-  assert.equal(recording.shouldRefreshRecordingMessages(first, second), true);
-  assert.equal(recording.shouldRefreshRecordingMessages(second, recording.reconcileRecordingCommand(second, first)), false);
+test('polls the claimed recording until the transcript arrives and refreshes again on completion or failure', () => {
+  const pending = { id: '21', conversationId: 1, status: 'PENDING' };
+  const claimed = { ...pending, status: 'CLAIMED' };
+  const first = { ...claimed, status: 'COMPLETED' };
+  const second = { ...first, id: '22' };
+  const failed = { ...claimed, status: 'FAILED' };
+  assert.equal(recording.shouldRefreshRecordingMessages(null, pending, '1'), false);
+  assert.equal(recording.shouldRefreshRecordingMessages(pending, claimed, '1'), true);
+  assert.equal(recording.shouldRefreshRecordingMessages(claimed, claimed, '1'), true);
+  assert.equal(recording.shouldRefreshRecordingMessages(claimed, claimed, '2'), false);
+  assert.equal(recording.shouldRefreshRecordingMessages(null, first, '1'), true);
+  assert.equal(recording.shouldRefreshRecordingMessages(first, first, '1'), false);
+  assert.equal(recording.shouldRefreshRecordingMessages(first, second, '1'), true);
+  assert.equal(recording.shouldRefreshRecordingMessages(claimed, failed, '1'), true);
+  assert.equal(recording.shouldRefreshRecordingMessages(failed, failed, '1'), false);
+  assert.equal(recording.shouldRefreshRecordingMessages(second, recording.reconcileRecordingCommand(second, first), '1'), false);
+});
+
+test('merges a delayed poll and send response without dropping messages or duplicating bubbles', () => {
+  const transcript = { id: '99', role: 'user', content: '음성 입력' };
+  const typed = { id: '100', role: 'user', content: '텍스트 입력' };
+  const reply = { id: '101', role: 'assistant', content: '답변' };
+  const typedWithAttachment = { ...typed, attachments: [{ id: 'file-1', name: 'notes.pdf' }] };
+  const afterPoll = mergeChatMessages([reply], [transcript, typed, reply]);
+  const afterSend = mergeChatMessages(afterPoll, [typedWithAttachment, reply]);
+  assert.deepEqual(afterSend, [transcript, typedWithAttachment, reply]);
+  assert.equal(mergeChatMessages(afterSend, [transcript, typed]), afterSend);
 });
 
 test('upload uses authenticated multipart and preserves the server document ID', async () => {
