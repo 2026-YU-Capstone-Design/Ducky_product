@@ -60,6 +60,31 @@ class ConversationRouterTest {
         assertThat(router.decide("왜 CPU가 뜨거워?", List.of()).mode()).isEqualTo(ConversationRouter.Mode.DIRECT);
     }
 
+    @Test void featureAndSocialQuestionsDoNotInheritHintOrDocumentMode() {
+        var topic = ChatMessage.create(null, "user", "인덱스 오류를 설명해", "question", "text", 1);
+        var hint = ChatMessage.create(null, "assistant", "인덱스 범위를 확인해 보세요.", "hint", "system", 2);
+        var document = ChatMessage.create(null, "assistant", "문서 출처", "answer", "system", 2);
+        document.setResponseStrategy("DOCUMENT");
+
+        for (var history : List.of(List.of(topic, hint), List.of(topic, document))) {
+            for (String question : List.of("그럼 너 누구야?", "고마워!", "힌트 기능이 뭐야? 기능 자체만 짧게 설명해줘.")) {
+                var decision = router.decide(question, history, true);
+                assertThat(decision.mode()).as(question).isEqualTo(ConversationRouter.Mode.DIRECT);
+                assertThat(decision.needsDocuments()).as(question).isFalse();
+                assertThat(decision.simpleIntent()).as(question).isNotNull();
+            }
+        }
+        assertThat(router.decide("다음은?", List.of(topic, hint)).mode()).isEqualTo(ConversationRouter.Mode.HINT);
+        assertThat(router.decide("그럼 파이썬 리스트가 뭐야?", List.of(topic, hint)).mode()).isEqualTo(ConversationRouter.Mode.DIRECT);
+        assertThat(router.decide("그건 왜?", List.of(topic, document)).mode()).isEqualTo(ConversationRouter.Mode.DOCUMENT);
+    }
+
+    @Test void requestForOneClueCanGuideLearningWithoutUsingTheWordHint() {
+        var decision = router.decide("인덱스 오류를 혼자 찾아보고 싶어. 확인할 단서 하나만 줘.", List.of());
+        assertThat(decision.mode()).isEqualTo(ConversationRouter.Mode.HINT);
+        assertThat(decision.simpleIntent()).isNull();
+    }
+
     @Test void existingRequestAliasesRemainCompatibleAndSelectionIsOptional() {
         var mapper = new ObjectMapper();
         var old = mapper.readValue("{\"conversation_id\":1,\"message\":\"hello\",\"input_type\":\"text\"}", SendMessageRequest.class);
@@ -69,5 +94,17 @@ class ConversationRouterTest {
         assertThat(selected.documentIds()).containsExactly(4L);
         var empty = mapper.readValue("{\"documentIds\":[]}", SendMessageRequest.class);
         assertThat(empty.documentIds()).isEmpty();
+    }
+
+    @Test void reviewAndExerciseCoachingAreDistinctFromDefinitions() {
+        assertThat(router.decide("그럼 피드백해줘", List.of()).mode()).isEqualTo(ConversationRouter.Mode.CLARIFY);
+        var review = router.decide("피드백해줘", List.of(), true);
+        assertThat(review.mode()).isEqualTo(ConversationRouter.Mode.REVIEW);
+        assertThat(review.needsDocuments()).isTrue();
+        assertThat(router.decide("피드백이 뭐야?", List.of()).mode()).isEqualTo(ConversationRouter.Mode.DIRECT);
+        assertThat(router.decide("이 연습 문제를 풀어줘. 2x + 3 = 9", List.of()).mode())
+                .isEqualTo(ConversationRouter.Mode.HINT);
+        assertThat(router.decide("이 문제 풀어줘. 힌트 없이 정답만 알려줘.", List.of()).mode())
+                .isEqualTo(ConversationRouter.Mode.DIRECT);
     }
 }

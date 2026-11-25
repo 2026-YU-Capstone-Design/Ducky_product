@@ -195,6 +195,9 @@ public class ChatService {
         var sources = !completion && decision.needsDocuments()
                 ? documentService.search(user, decision.searchQuery(), 3, selectedIds).results()
                 : java.util.List.<com.rubberduck.domain.document.dto.DocumentSearchResult>of();
+        if (!completion && decision.mode() == ConversationRouter.Mode.REVIEW && decision.needsDocuments() && sources.isEmpty()) {
+            sources = documentService.sampleReviewSources(user, selectedIds);
+        }
         String documentContext = documentService.toPromptContext(sources);
         AiReply aiReply = completion
                 ? new AiReply(chatResponseService.generateCompletionFeedback(user, conversation, conversationHistory), "feedback", chatResponseService.responseMode())

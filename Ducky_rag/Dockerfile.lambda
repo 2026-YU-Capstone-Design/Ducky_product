@@ -1,4 +1,7 @@
 FROM public.ecr.aws/lambda/python:3.12
+ENV TESSDATA_PREFIX=/opt/ducky-tessdata
+COPY install_ocr_data.py /tmp/install_ocr_data.py
+RUN python /tmp/install_ocr_data.py "$TESSDATA_PREFIX" && rm /tmp/install_ocr_data.py
 COPY requirements.txt requirements-lambda.txt ${LAMBDA_TASK_ROOT}/
 RUN pip install --no-cache-dir -r ${LAMBDA_TASK_ROOT}/requirements-lambda.txt
 COPY ducky_rag ${LAMBDA_TASK_ROOT}/ducky_rag
