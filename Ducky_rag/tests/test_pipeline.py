@@ -282,6 +282,100 @@ def test_native_text_remains_searchable_when_optional_vision_is_unavailable(visi
     assert any(c["pageNumber"] == 1 and "native text" in c["content"] for c in result["chunks"])
 
 
+def test_partial_layout_keeps_tables_and_recovers_omitted_native_rows(monkeypatch):
+    monkeypatch.delenv("RAG_VISION_MODEL", raising=False)
+    table = "| Kind | Value |\n| --- | --- |\n| Visible | 7 |"
+    monkeypatch.setattr(pdf_layout, "_native_markdown", lambda doc, indexes: {
+        index: table if index == 0 else "Final native page." for index in indexes})
+    with pymupdf.open() as pdf:
+        page = pdf.new_page()
+        page.insert_text((72, 100), "Visible 7")
+        page.insert_text((72, 150), "Omitted row       18:00")
+        pdf.new_page().insert_text((72, 100), "Final native page.")
+        result = process_document(pdf.tobytes(), "42", "pdf")
+    assert table in result["markdown"]
+    restored = [chunk for chunk in result["chunks"] if "Omitted row" in chunk["content"]]
+    assert restored and all(chunk["pageNumber"] == 1 for chunk in restored)
+    assert any("18:00" in chunk["content"] for chunk in restored)
+    assert "원문 텍스트" not in result["markdown"].split("# PDF page 2")[1]
+    assert not any(block["source"].get("extraction") == "vision" for block in result["canonicalBlocks"])
+
+
+def test_markdown_formatting_does_not_trigger_native_transcript(monkeypatch):
+    monkeypatch.delenv("RAG_VISION_MODEL", raising=False)
+    monkeypatch.setattr(pdf_layout, "_native_markdown", lambda doc, indexes: {
+        index: "**Complete native**<br>**paragraph.**" for index in indexes})
+    result = process_document(make_pdf("Complete native paragraph."), "42", "pdf")
+    assert "원문 텍스트" not in result["markdown"]
+
+
+def test_optional_vision_provider_outage_stops_redundant_calls(vision_response):
+    calls = []
+    def unavailable(*args):
+        calls.append(args)
+        raise pdf_vision.PdfVisionError("PDF_VISION_UNAVAILABLE")
+    vision_response.setattr(pdf_vision, "_response", unavailable)
+    with pymupdf.open() as pdf:
+        for index in range(4):
+            page = pdf.new_page()
+            page.insert_text((72, 100), f"Readable native chart page {index + 1}.")
+            for x in (80, 125, 170):
+                page.draw_rect(pymupdf.Rect(x, 180, x + 15, 230), fill=(0, .4, .8))
+        result = process_document(pdf.tobytes(), "42", "pdf")
+    assert len(calls) == 1
+    assert result["warnings"] == ["IMAGES_NOT_ENRICHED"]
+    assert {chunk["pageNumber"] for chunk in result["chunks"]} == {1, 2, 3, 4}
+
+
+def test_visible_text_with_failed_native_extraction_requires_recovery(monkeypatch):
+    monkeypatch.delenv("RAG_VISION_MODEL", raising=False)
+    original = pymupdf.Page.get_text
+    def missing(self, *args, **kwargs):
+        return "" if not args else original(self, *args, **kwargs)
+    monkeypatch.setattr(pymupdf.Page, "get_text", missing)
+    monkeypatch.setattr(pdf_extraction, "read_scan", lambda page: "")
+    with pytest.raises(ProcessingError, match="PDF_VISION_REQUIRED"):
+        process_document(make_pdf("This visible text needs recovery."), "42", "pdf")
+
+
+def test_clipped_text_page_stays_blank_without_ocr(monkeypatch):
+    monkeypatch.delenv("RAG_VISION_MODEL", raising=False)
+    monkeypatch.setattr(pdf_extraction, "read_scan", lambda page: pytest.fail("blank page OCR"))
+    with pymupdf.open() as pdf:
+        page = pdf.new_page()
+        page.insert_text((72, 100), "Text outside the visible crop.")
+        page.set_cropbox(pymupdf.Rect(0, 200, 595, 800))
+        with pytest.raises(ProcessingError, match="NO_SEARCHABLE_TEXT"):
+            process_document(pdf.tobytes(), "42", "pdf")
+
+
+def test_optional_unreadable_chart_does_not_skip_later_visual_evidence(vision_response):
+    calls = []
+    def response(*args):
+        calls.append(args)
+        return (vision_reply("unreadable", "") if len(calls) == 1
+                else vision_reply("content", "Later chart reports eight percent."))
+    vision_response.setattr(pdf_vision, "_response", response)
+    with pymupdf.open() as pdf:
+        for index in range(2):
+            page = pdf.new_page()
+            page.insert_text((72, 100), f"Native chart paragraph {index + 1}.")
+            for x in (80, 125, 170):
+                page.draw_rect(pymupdf.Rect(x, 180, x + 15, 230), fill=(0, .4, .8))
+        result = process_document(pdf.tobytes(), "42", "pdf")
+    assert len(calls) == 2
+    assert any(c["pageNumber"] == 2 and "eight percent" in c["content"] for c in result["chunks"])
+
+
+def test_expired_vision_budget_does_not_render_another_page(vision_response):
+    class UnrenderablePage:
+        def get_pixmap(self, **kwargs):
+            pytest.fail("expired budget must not render")
+    reader = pdf_vision.OpenAIPageReader("fixture-model")
+    with pytest.raises(pdf_vision.PdfVisionError, match="PDF_VISION_LIMIT"):
+        reader.read(UnrenderablePage(), supplement=True, deadline=0)
+
+
 @pytest.mark.parametrize("data,document_id,kind,error", [
     (b"not a pdf", "1", "pdf", "INVALID_PDF"),
     (b"%PDF-1.7\nsynthetic malformed input\n", "1", "pdf", "INVALID_PDF"),
