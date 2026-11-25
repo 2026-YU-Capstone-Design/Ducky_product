@@ -192,8 +192,10 @@ public class ChatService {
                 : new tools.jackson.databind.ObjectMapper().readValue(conversation.getSelectedDocumentIdsJson(),
                     new tools.jackson.core.type.TypeReference<List<Long>>() {});
         var decision = conversationRouter.decide(normalizedText, conversationHistory, explicitDocumentContext);
+        int sourceLimit = decision.mode() == ConversationRouter.Mode.DOCUMENT
+                ? DocumentService.DOCUMENT_ANSWER_SOURCE_LIMIT : 3;
         var sources = !completion && decision.needsDocuments()
-                ? documentService.search(user, decision.searchQuery(), 3, selectedIds).results()
+                ? documentService.search(user, decision.searchQuery(), sourceLimit, selectedIds).results()
                 : java.util.List.<com.rubberduck.domain.document.dto.DocumentSearchResult>of();
         if (!completion && decision.mode() == ConversationRouter.Mode.REVIEW && decision.needsDocuments() && sources.isEmpty()) {
             sources = documentService.sampleReviewSources(user, selectedIds);
