@@ -228,6 +228,39 @@ def test_vision_budget_prioritizes_required_pages_and_preserves_native_text(visi
     assert any(c["pageNumber"] == 2 and "Required scan recovered" in c["content"] for c in result["chunks"])
 
 
+def test_late_unique_raster_is_selected_ahead_of_repeated_images(vision_response):
+    vision_response.setattr(pdf_extraction, "MAX_VISION_PAGES", 1)
+    inspected = []
+
+    class Reader:
+        def __init__(self, model):
+            pass
+
+        def read(self, page, *, supplement, deadline):
+            assert supplement
+            inspected.append(page.number + 1)
+            return "The final graph reports a rate of eight percent."
+
+    vision_response.setattr(pdf_extraction, "OpenAIPageReader", Reader)
+    with pymupdf.open() as pdf:
+        repeat = pymupdf.Pixmap(pymupdf.csRGB, (0, 0, 50, 50), False)
+        repeat.clear_with(75)
+        unique = pymupdf.Pixmap(pymupdf.csRGB, (0, 0, 55, 55), False)
+        unique.clear_with(180)
+        for index in range(13):
+            page = pdf.new_page()
+            page.insert_text((72, 100), f"Native heading and chapter text for slide {index + 1}.")
+            page.insert_image(pymupdf.Rect(72, 130, 282, 340), pixmap=repeat)
+        page = pdf.new_page()
+        page.insert_text((72, 100), "The graphical result is shown in the chart below.")
+        page.insert_image(pymupdf.Rect(72, 130, 282, 340), pixmap=unique)
+        result = process_document(pdf.tobytes(), "1", "pdf")
+
+    assert inspected == [14]
+    assert "IMAGES_NOT_ENRICHED" in result["warnings"]
+    assert any(c["pageNumber"] == 14 and "eight percent" in c["content"] for c in result["chunks"])
+
+
 @pytest.mark.parametrize("has_model", [False, True])
 def test_native_text_remains_searchable_when_optional_vision_is_unavailable(vision_response, has_model):
     if not has_model:

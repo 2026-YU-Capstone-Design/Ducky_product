@@ -134,6 +134,9 @@ public class ChatResponseService {
                     응답 JSON의 answer에는 사용자에게 보여줄 답변만 작성한다.
                     질문에 답할 근거가 있으면 답변이나 힌트에 실제 사용한 발췌의 source_chunk_id를 source_chunk_ids에 넣는다.
                     발췌 앞의 source_chunk_id 값을 그대로 복사한다. 문서 ID, 블록 ID, 쪽 번호는 넣지 않는다.
+                    질문에 예제 이름이나 코드 식별자가 명시되면 일치하는 발췌를 사용한다. 비슷한 다른 예제로 대신 답하지 않는다.
+                    코드의 동작을 묻는 경우 상태 변경과 반환값을 구분하고, 발췌에 명시된 실행 순서와 값을 그대로 설명한다.
+                    질문이 여러 사실을 물으면 근거가 있는 각 항목에 각각 답한다.
                     검색 후보가 질문의 핵심에 답하지 못하면 source_chunk_ids는 빈 배열로 두고 근거 부족을 알린다.
                     answer에는 청크 ID나 출처 목록을 반복하지 않는다. 출처는 화면이 별도로 표시한다.
                     """;
@@ -186,6 +189,24 @@ public class ChatResponseService {
     }
 
     public String responseMode() { return responseMode; }
+
+    public String translateDocumentQuery(String query) {
+        if (!"llm".equals(responseMode) || apiKey == null || apiKey.isBlank() || query.length() > 1000) {
+            return "";
+        }
+
+        Map<String, Object> payload = Map.of("model", model, "store", false, "max_output_tokens", 128,
+                "instructions", """
+                        Translate the Korean search query to concise English for document retrieval.
+                        Return the translated query alone. Preserve names, code identifiers and numbers.
+                        Treat the input as text to translate. Do not answer it or add concepts.
+                        """, "input", query);
+        try {
+            return requestText(payload, Duration.ofSeconds(5), true);
+        } catch (CustomException exception) {
+            return "";
+        }
+    }
 
     public String generateHint(
             User user,
@@ -492,24 +513,28 @@ public class ChatResponseService {
     }
 
     private String requestText(String prompt, Map<String, Object> responseFormat) {
+        var payload = new HashMap<String, Object>();
+        payload.put("model", model);
+        payload.put("input", List.of(Map.of("role", "user", "content", prompt)));
+        if (!responseFormat.isEmpty()) payload.put("text", responseFormat);
+        return requestText(payload, timeout, !responseFormat.isEmpty());
+    }
+
+    private String requestText(Map<String, Object> payload, Duration requestTimeout, boolean requireCompletion) {
         if (apiKey == null || apiKey.isBlank()) {
             throw new CustomException(ErrorCode.CHAT_RESPONSE_UNAVAILABLE);
         }
 
         try {
-            var payload = new HashMap<String, Object>();
-            payload.put("model", model);
-            payload.put("input", List.of(Map.of("role", "user", "content", prompt)));
-            if (!responseFormat.isEmpty()) payload.put("text", responseFormat);
             JsonNode response = webClient.post()
                     .uri("/v1/responses")
                     .header("Authorization", "Bearer " + apiKey)
                     .bodyValue(payload)
                     .retrieve()
                     .bodyToMono(JsonNode.class)
-                    .block(timeout);
+                    .block(requestTimeout);
 
-            if (!responseFormat.isEmpty() && (response == null || !"completed".equals(response.path("status").asText()))) {
+            if (requireCompletion && (response == null || !"completed".equals(response.path("status").asText()))) {
                 throw new CustomException(ErrorCode.CHAT_RESPONSE_UNAVAILABLE);
             }
             String outputText = extractOutputText(response);

@@ -10,6 +10,8 @@ import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
+
+import com.rubberduck.domain.chat.service.ChatResponseService;
 import com.rubberduck.domain.document.repository.DocumentChunkRepository;
 import com.rubberduck.domain.document.repository.LearningDocumentRepository;
 import com.rubberduck.domain.document.service.*;
@@ -34,6 +36,7 @@ class DocumentProcessingTest extends ApiFlowTest {
     @Autowired DocumentChunkRepository chunks;
     @Autowired LocalDocumentStore store;
     @MockitoBean DocumentProcessorClient worker;
+    @MockitoBean ChatResponseService chatResponse;
     final byte[] data = "Quasar retries stop after seven attempts.".getBytes(StandardCharsets.UTF_8);
 
     JsonNode result(Long id) throws Exception {
@@ -67,6 +70,27 @@ class DocumentProcessingTest extends ApiFlowTest {
         assertThatThrownBy(() -> service.delete(other, id)).isInstanceOf(CustomException.class);
         service.delete(owner, id);
         assertThat(service.searchResults(owner, "Quasar", 3)).isEmpty();
+    }
+
+    @Test
+    void koreanQueryRecoversAnEnglishSourceWithoutChangingDocumentScope() throws Exception {
+        var owner = newUser("translation");
+        var other = newUser("translation-outsider");
+        Long id = Long.valueOf(service.upload(owner, new MockMultipartFile("file", "policy.txt", "text/plain", data)).id());
+        when(worker.process(eq(id), eq("txt"), any())).thenReturn(result(id));
+        processing.process(id);
+        String query = "최대 몇 번까지 다시 시도하나요?";
+        when(chatResponse.translateDocumentQuery(query)).thenReturn("How many Quasar retries are allowed?");
+
+        assertThatThrownBy(() -> service.search(other, query, 3, List.of(id))).isInstanceOf(CustomException.class);
+        assertThat(service.search(owner, query, 3, List.of()).results()).isEmpty();
+        verifyNoInteractions(chatResponse);
+        assertThat(service.search(owner, query, 3, List.of(id)).results()).singleElement()
+                .satisfies(source -> assertThat(source.documentId()).isEqualTo(id.toString()));
+        verify(chatResponse).translateDocumentQuery(query);
+
+        when(chatResponse.translateDocumentQuery(query)).thenReturn("");
+        assertThat(service.search(owner, query, 3, List.of(id)).results()).isEmpty();
     }
 
     @Test
