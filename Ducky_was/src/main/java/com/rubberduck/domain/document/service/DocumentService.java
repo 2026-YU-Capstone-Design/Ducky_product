@@ -1,5 +1,6 @@
 package com.rubberduck.domain.document.service;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -8,6 +9,7 @@ import java.io.IOException;
 
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -182,15 +184,42 @@ public class DocumentService {
                 .orElse("");
     }
 
+    @Transactional(readOnly = true)
+    public List<DocumentSearchResult> sampleReviewSources(User user, List<Long> selectedIds) {
+        if (selectedIds == null || selectedIds.isEmpty()) return List.of();
+        var owned = selectedIds.stream().distinct().map(id -> getUserDocument(user, id)).toList();
+        int limit = 3;
+        var documents = owned.stream().filter(doc -> doc.isRagEnabled() && "indexed".equals(doc.getIndexingStatus()))
+                .limit(limit).toList();
+        var sources = new ArrayList<DocumentSearchResult>(limit);
+        for (int docIndex = 0; docIndex < documents.size(); docIndex++) {
+            var doc = documents.get(docIndex);
+            long count = chunkRepository.countByDocument(doc);
+            int share = (limit - sources.size()) / (documents.size() - docIndex);
+            int sampleCount = (int) Math.min(share, count);
+            for (int index = 0; index < sampleCount; index++) {
+                int offset = Math.toIntExact(sampleCount == 1 ? 0 : index * (count - 1) / (sampleCount - 1));
+                chunkRepository.findByDocumentOrderByChunkIndexAscIdAsc(doc, PageRequest.of(offset, 1)).stream()
+                        .map(chunk -> toSource(chunk, 0.0d)).findFirst().ifPresent(sources::add);
+            }
+        }
+        return List.copyOf(sources);
+    }
+
     private DocumentSearchResult toSearchResult(DocumentChunk chunk, double[] queryEmbedding, Map<String, Double> sparseQuery) {
+        double score = SparseEmbeddingService.MODEL.equals(chunk.getEmbeddingModel())
+                ? sparseEmbeddingService.score(sparseQuery, chunk.getEmbeddingJson())
+                : embeddingService.cosine(queryEmbedding, embeddingService.fromJson(chunk.getEmbeddingJson()));
+        return toSource(chunk, score);
+    }
+
+    private DocumentSearchResult toSource(DocumentChunk chunk, double score) {
         return new DocumentSearchResult(
                 String.valueOf(chunk.getDocument().getId()),
                 String.valueOf(chunk.getId()),
                 chunk.getDocument().getTitle(),
                 chunk.getContent(),
-                SparseEmbeddingService.MODEL.equals(chunk.getEmbeddingModel())
-                        ? sparseEmbeddingService.score(sparseQuery, chunk.getEmbeddingJson())
-                        : embeddingService.cosine(queryEmbedding, embeddingService.fromJson(chunk.getEmbeddingJson())),
+                score,
                 chunk.getBlockId(),
                 chunk.getHeadingPath(),
                 pageNumber(chunk)

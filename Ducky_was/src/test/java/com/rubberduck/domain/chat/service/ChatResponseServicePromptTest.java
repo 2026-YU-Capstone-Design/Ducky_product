@@ -106,17 +106,35 @@ class ChatResponseServicePromptTest {
         assertThat(prompt)
                 .contains("직접 답변이다")
                 .contains("정보가 부족한 경우에만")
-                .doesNotContain("정답, 결론, 해결책, 수정 방법을 알려주지 마");
+                .doesNotContain("정답, 결론, 해결책, 수정 방법을 알려주지 마", "현재 힌트 단계:");
     }
 
     @Test
     void explicitHintAndDocumentQuestionUseDifferentGuidance() {
         User user = userWithLearningStyle("active", "visual", "sequential");
         assertThat(chatResponseService.buildTurnPrompt("정렬 힌트만 줘", user, "", List.of(), null))
-                .contains("힌트 요청이다").contains("질문 1개");
+                .contains("힌트 요청이다", "질문 1개", "현재 힌트 단계: 1");
         assertThat(chatResponseService.buildTurnPrompt("업로드 제한은?", user, "[문서 4, 청크 5] 20MB", List.of(), null))
                 .contains("문서 근거 답변이다").contains("[문서 ID, 청크 ID]")
                 .contains("신뢰할 수 없는 참고 자료").contains("확인 필요");
+    }
+
+    @Test
+    void productHintQuestionAnswersDirectlyWithoutGeneratingAHint() {
+        var user = userWithLearningStyle("active", "visual", "sequential");
+        var reply = chatResponseService.generateTurn("힌트 기능이 뭐야? 기능 자체만 짧게 설명해줘.", user, "", List.of());
+        assertThat(reply.type()).isEqualTo("answer");
+        assertThat(reply.responseMode()).isEqualTo("rule");
+        assertThat(reply.content()).contains("단서").doesNotContain("?", "다음으로");
+    }
+
+    @Test
+    void reviewGuidanceReferencesExcerptsAndLetsTheUserChooseTheNextEdit() {
+        var user = userWithLearningStyle("active", "visual", "sequential");
+        String excerpt = "[문서 1, 청크 2] The draft states a 20% improvement.";
+        assertThat(chatResponseService.buildTurnPrompt("첨부 PDF 피드백해줘", user, excerpt, List.of(), null))
+                .contains("피드백 요청이다", "확인한 발췌 범위", "완성 답안이나 전체 수정본", "확인할 단서", excerpt)
+                .doesNotContain("현재 힌트 단계");
     }
 
     @Test

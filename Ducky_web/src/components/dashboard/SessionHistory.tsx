@@ -22,6 +22,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useSessionHistory } from "@/hooks/useSessionHistory";
+import { AssistantMarkdown } from "@/components/chat/AssistantMarkdown";
 import type { ChatMessage } from "@/types/chat";
 import type { Session, SessionStatus } from "@/types/session";
 import { cn } from "@/lib/utils";
@@ -83,7 +84,7 @@ function SessionMessage({ message }: { message: ChatMessage }) {
 
       <div
         className={cn(
-          "flex max-w-[86%] flex-col gap-[3px]",
+          "flex min-w-0 max-w-[86%] flex-col gap-[3px]",
           isUser && "items-end",
         )}
       >
@@ -95,7 +96,7 @@ function SessionMessage({ message }: { message: ChatMessage }) {
 
         <div
           className={cn(
-            "rounded-[14px] px-[15px] py-[11px] text-[13.5px] leading-relaxed [overflow-wrap:anywhere] whitespace-pre-wrap",
+            "min-w-0 rounded-[14px] px-[15px] py-[11px] text-[13.5px] leading-relaxed [overflow-wrap:anywhere]",
             isUser
               ? "rounded-br-[4px] border border-[#F0E0A8] bg-[#FFF9E8] text-[#3D2E0A] dark:border-white/10 dark:bg-[#2A2310] dark:text-[#F0E0C4]"
               : "rounded-bl-[4px] border border-[#F0E0A8] bg-white text-[#3D2E0A] dark:border-white/10 dark:bg-[#211C12] dark:text-[#F0E0C4]",
@@ -103,7 +104,7 @@ function SessionMessage({ message }: { message: ChatMessage }) {
               "border-2 border-[#FECA43] bg-[#FFE9A0] dark:border-[#FECA43] dark:bg-[#46350F]",
           )}
         >
-          {message.content}
+          {isUser ? <div className="whitespace-pre-wrap">{message.content}</div> : <AssistantMarkdown content={message.content} />}
         </div>
 
         <time
