@@ -105,6 +105,14 @@ test('polls the claimed recording until the transcript arrives and refreshes aga
   assert.equal(recording.shouldRefreshRecordingMessages(second, recording.reconcileRecordingCommand(second, first), '1'), false);
 });
 
+test('a silent Pi recording gives a retry notice in its chat without relabeling timeouts', () => {
+  const failed = { status: 'FAILED', conversationId: 1, errorMessage: 'Native voice turn did not complete' };
+  assert.equal(recording.getRecordingRetryNotice(failed, '1'), '음성을 확인하지 못했어요. 다시 말해 주세요.');
+  assert.equal(recording.getRecordingRetryNotice(failed, '2'), null);
+  assert.equal(recording.getRecordingRetryNotice({ ...failed, errorMessage: 'timed out' }, '1'), null);
+  assert.equal(recording.getRecordingRetryNotice({ ...failed, status: 'COMPLETED' }, '1'), null);
+});
+
 test('merges a delayed poll and send response without dropping messages or duplicating bubbles', () => {
   const transcript = { id: '99', role: 'user', content: '음성 입력' };
   const typed = { id: '100', role: 'user', content: '텍스트 입력' };
