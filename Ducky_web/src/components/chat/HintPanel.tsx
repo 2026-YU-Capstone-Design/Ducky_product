@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { HintRecord } from "@/types/chat";
+import { AssistantMarkdown } from "./AssistantMarkdown";
 
 interface HintPanelProps {
   activeTitle: string;
@@ -125,9 +126,9 @@ export function HintPanel({
                       힌트 {hint.number}
                     </p>
                   </div>
-                  <p className="mt-[5px] text-xs leading-relaxed text-[#5C4413] break-keep dark:text-[#E8C97A]">
-                    {hint.content}
-                  </p>
+                  <div className="mt-[5px] text-xs leading-relaxed text-[#5C4413] break-keep dark:text-[#E8C97A]">
+                    <AssistantMarkdown content={hint.content} />
+                  </div>
                 </article>
               ))}
             </div>

@@ -33,6 +33,7 @@ import {
   retryDocument,
   isDocumentProcessing,
   isDocumentSearchable,
+  documentProcessingErrorMessage,
 } from "@/lib/api/documents";
 import { cn } from "@/lib/utils";
 import type {
@@ -461,13 +462,17 @@ export function MaterialLibrary() {
                     </p>
                     {material.processingError && (
                       <p className="mt-2 text-xs text-red-700" role="status">
-                        {material.processingError === "OCR_REQUIRED"
-                          ? "이미지로만 된 페이지가 있어 OCR 처리가 필요합니다. 텍스트를 선택할 수 있는 PDF로 올려 주세요."
-                          : `문서 처리 실패: ${material.processingError}`}
+                        {documentProcessingErrorMessage(material.processingError)}
                       </p>
                     )}
                     {material.processingWarnings?.includes("IMAGES_NOT_ENRICHED") && (
-                      <p className="mt-2 text-xs text-amber-800">문서의 텍스트를 검색합니다. 이미지 속 내용은 아직 인식하지 않았습니다.</p>
+                      <p className="mt-2 text-xs text-amber-800">일부 이미지와 차트의 내용은 검색에 포함되지 않았습니다.</p>
+                    )}
+                    {material.processingWarnings?.includes("OCR_TEXT_UNAVAILABLE") && (
+                      <p className="mt-2 text-xs text-amber-800">글자를 인식하지 못한 스캔 페이지는 검색에서 제외했습니다.</p>
+                    )}
+                    {material.processingWarnings?.includes("PDF_VISION_EXTRACTED") && (
+                      <p className="mt-2 text-xs text-gray-600">이미지에서 읽은 내용도 검색에 포함됩니다.</p>
                     )}
                     {material.chunkCount != null && (
                       <p className="mt-1 text-xs text-gray-500">검색 단위 {material.chunkCount}개</p>

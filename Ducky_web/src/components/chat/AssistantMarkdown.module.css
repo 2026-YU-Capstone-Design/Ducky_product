@@ -1,0 +1,87 @@
+.content {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.content > * + *,
+.content li > * + * {
+  margin-block-start: 0.65em;
+}
+
+.content p {
+  white-space: pre-line;
+}
+
+.content :is(h1, h2, h3, h4, h5, h6) {
+  font-size: 1.05em;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.content ul {
+  list-style: disc;
+  padding-inline-start: 1.35em;
+}
+
+.content ol {
+  list-style: decimal;
+  padding-inline-start: 1.35em;
+}
+
+.content li + li {
+  margin-block-start: 0.25em;
+}
+
+.content :not(pre) > code {
+  border-radius: 0.25em;
+  background: color-mix(in srgb, currentColor 9%, transparent);
+  padding: 0.12em 0.28em;
+}
+
+.content pre {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, currentColor 6%, transparent);
+  padding: 0.65em 0.85em;
+  white-space: pre;
+  overflow-wrap: normal;
+}
+
+.content code {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.93em;
+}
+
+.content blockquote {
+  border-inline-start: 3px solid color-mix(in srgb, currentColor 24%, transparent);
+  padding-inline-start: 0.7em;
+}
+
+.content a {
+  text-decoration: underline;
+  text-underline-offset: 0.16em;
+}
+
+.tableScroll,
+.content :global(.katex-display) {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.content :global(.katex-display) {
+  margin-block: 0.5em;
+  padding-block: 0.2em;
+}
+
+.content table {
+  border-collapse: collapse;
+}
+
+.content :is(th, td) {
+  border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+  padding: 0.3em 0.55em;
+  text-align: start;
+}
