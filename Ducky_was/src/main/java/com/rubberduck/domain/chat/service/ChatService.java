@@ -6,6 +6,7 @@ import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.rubberduck.domain.chat.dto.ChatTurnResponse;
 import com.rubberduck.domain.chat.dto.ConversationDetailResponse;
@@ -38,6 +39,9 @@ public class ChatService {
     private final ChatResponseService chatResponseService;
     private final DocumentService documentService;
     private final ConversationRouter conversationRouter;
+    private final TransactionTemplate transactionTemplate;
+
+    private record SubmittedTurn(Long conversationId, Long messageId) {}
 
     @Transactional
     public ConversationSummaryResponse startConversation(
@@ -73,16 +77,15 @@ public class ChatService {
 
     @Transactional
     public ChatTurnResponse sendMessage(User user, Long conversationId, String messageText, String inputType, List<Long> documentIds) {
-        Conversation conversation = getConversationEntity(conversationId);
-        ensureOwner(conversation, user);
+        Conversation conversation = lockConversation(user, conversationId);
         if (documentIds != null) {
             documentIds.forEach(id -> documentService.get(user, id));
             conversation.setSelectedDocumentIdsJson(new tools.jackson.databind.ObjectMapper().writeValueAsString(documentIds));
         }
-        return appendUserTurn(user, conversation, messageText, inputType, null, documentIds != null && !documentIds.isEmpty());
+        ChatMessage userMessage = saveUserMessage(conversation, messageText, inputType);
+        return appendAssistantReply(user, conversation, userMessage, null, documentIds != null && !documentIds.isEmpty());
     }
 
-    @Transactional
     public ChatTurnResponse sendDeviceMessage(
             DeviceUser link,
             Long conversationId,
@@ -92,24 +95,31 @@ public class ChatService {
     ) {
         Device device = link.getDevice();
         User user = link.getUser();
-        Long targetId = conversationId != null ? conversationId : findActiveConversationId(link).orElse(null);
-        Conversation conversation;
-        if (targetId == null) {
-            conversation = conversationRepository.save(
-                    Conversation.start(user, device, null, "Raspberry voice session", "음성 러버덕 질문 연결"));
-        } else {
-            conversation = lockAssignableConversation(user, device, targetId);
-            conversation.setDevice(device);
-        }
-
-        return appendUserTurn(user, conversation, messageText, inputType == null ? "voice" : inputType, learningType, false);
+        // The Pi's HTTP request spans two transactions so history can show the transcript during inference.
+        SubmittedTurn submitted = transactionTemplate.execute(status -> {
+            Long targetId = conversationId != null ? conversationId : findActiveConversationId(link).orElse(null);
+            Conversation conversation;
+            if (targetId == null) {
+                conversation = conversationRepository.save(
+                        Conversation.start(user, device, null, "Raspberry voice session", "음성 러버덕 질문 연결"));
+            } else {
+                conversation = lockAssignableConversation(user, device, targetId);
+                conversation.setDevice(device);
+            }
+            ChatMessage userMessage = saveUserMessage(conversation, messageText, inputType == null ? "voice" : inputType);
+            return new SubmittedTurn(conversation.getId(), userMessage.getId());
+        });
+        return transactionTemplate.execute(status -> {
+            Conversation conversation = lockAssignableConversation(user, device, submitted.conversationId());
+            ChatMessage userMessage = chatMessageRepository.findById(submitted.messageId())
+                    .orElseThrow(() -> new CustomException(ErrorCode.SESSION_NOT_FOUND));
+            return appendAssistantReply(user, conversation, userMessage, learningType, false);
+        });
     }
 
     @Transactional
     public Conversation lockAssignableConversation(User user, Device device, Long conversationId) {
-        Conversation conversation = conversationRepository.findLockedById(conversationId)
-                .orElseThrow(() -> new CustomException(ErrorCode.SESSION_NOT_FOUND));
-        ensureOwner(conversation, user);
+        Conversation conversation = lockConversation(user, conversationId);
         if (conversation.getDevice() != null && !conversation.getDevice().getId().equals(device.getId())) {
             throw new CustomException(ErrorCode.FORBIDDEN);
         }
@@ -162,31 +172,31 @@ public class ChatService {
         }
     }
 
-    private ChatTurnResponse appendUserTurn(
-            User user,
-            Conversation conversation,
-            String messageText,
-            String inputType,
-            Map<String, String> learningType,
-            boolean explicitDocumentContext
-    ) {
+    private ChatMessage saveUserMessage(Conversation conversation, String messageText, String inputType) {
         String normalizedText = requireText(messageText);
-        boolean completion = isCompletionText(normalizedText);
-        List<ChatMessage> conversationHistory = chatMessageRepository.findByConversationOrderBySequenceNoAsc(conversation);
-        int userSequence = conversation.getMessageCount() + 1;
-
+        String normalizedInputType = normalizeInputType(inputType);
         ChatMessage userMessage = ChatMessage.create(
-                conversation,
-                "user",
-                normalizedText,
-                completion ? "answer" : "question",
-                normalizeInputType(inputType),
-                userSequence
+                conversation, "user", normalizedText, isCompletionText(normalizedText) ? "answer" : "question",
+                normalizedInputType, conversation.getMessageCount() + 1
         );
-        if ("voice".equals(normalizeInputType(inputType))) {
+        if ("voice".equals(normalizedInputType)) {
             userMessage.setSttText(normalizedText);
         }
         conversation.increaseMessageCount();
+        return chatMessageRepository.save(userMessage);
+    }
+
+    private ChatTurnResponse appendAssistantReply(
+            User user,
+            Conversation conversation,
+            ChatMessage userMessage,
+            Map<String, String> learningType,
+            boolean explicitDocumentContext
+    ) {
+        String normalizedText = userMessage.getMessageText();
+        boolean completion = "answer".equals(userMessage.getMessageType());
+        List<ChatMessage> conversationHistory = chatMessageRepository
+                .findByConversationAndSequenceNoLessThanOrderBySequenceNoAsc(conversation, userMessage.getSequenceNo());
 
         List<Long> selectedIds = conversation.getSelectedDocumentIdsJson() == null ? null
                 : new tools.jackson.databind.ObjectMapper().readValue(conversation.getSelectedDocumentIdsJson(),
@@ -211,7 +221,7 @@ public class ChatService {
                 aiReply.content(),
                 aiReply.type(),
                 "system",
-                userSequence + 1
+                conversation.getMessageCount() + 1
         );
         aiMessage.setSources(aiReply.sources());
         aiMessage.setResponseStrategy(completion ? "COMPLETION" : decision.needsDocuments() && aiReply.sources().isEmpty()
@@ -229,9 +239,7 @@ public class ChatService {
             conversation.complete();
         }
 
-        chatMessageRepository.save(userMessage);
         chatMessageRepository.save(aiMessage);
-        conversationRepository.save(conversation);
 
         return new ChatTurnResponse(
                 String.valueOf(conversation.getId()),
@@ -242,8 +250,7 @@ public class ChatService {
 
     @Transactional
     public HintResponse requestHint(User user, Long conversationId) {
-        Conversation conversation = getConversationEntity(conversationId);
-        ensureOwner(conversation, user);
+        Conversation conversation = lockConversation(user, conversationId);
 
         List<ChatMessage> conversationHistory = chatMessageRepository.findByConversationOrderBySequenceNoAsc(conversation);
         List<ChatMessage> previousHints = conversationHistory.stream()
@@ -280,8 +287,7 @@ public class ChatService {
 
     @Transactional
     public EndConversationResponse endConversation(User user, Long conversationId) {
-        Conversation conversation = getConversationEntity(conversationId);
-        ensureOwner(conversation, user);
+        Conversation conversation = lockConversation(user, conversationId);
 
         if (!"completed".equals(conversation.getStatus())) {
             conversation.complete();
@@ -311,8 +317,7 @@ public class ChatService {
 
     @Transactional
     public void deleteConversation(User user, Long conversationId) {
-        Conversation conversation = getConversationEntity(conversationId);
-        ensureOwner(conversation, user);
+        Conversation conversation = lockConversation(user, conversationId);
         chatMessageRepository.deleteByConversation(conversation);
         conversationRepository.delete(conversation);
     }
@@ -323,6 +328,16 @@ public class ChatService {
         }
         return conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new CustomException(ErrorCode.SESSION_NOT_FOUND));
+    }
+
+    private Conversation lockConversation(User user, Long conversationId) {
+        if (conversationId == null) {
+            throw new CustomException(ErrorCode.INVALID_REQUEST);
+        }
+        Conversation conversation = conversationRepository.findLockedById(conversationId)
+                .orElseThrow(() -> new CustomException(ErrorCode.SESSION_NOT_FOUND));
+        ensureOwner(conversation, user);
+        return conversation;
     }
 
     private void ensureOwner(Conversation conversation, User user) {
