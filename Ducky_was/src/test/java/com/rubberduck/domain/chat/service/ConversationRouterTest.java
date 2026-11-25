@@ -83,6 +83,29 @@ class ConversationRouterTest {
         var decision = router.decide("인덱스 오류를 혼자 찾아보고 싶어. 확인할 단서 하나만 줘.", List.of());
         assertThat(decision.mode()).isEqualTo(ConversationRouter.Mode.HINT);
         assertThat(decision.simpleIntent()).isNull();
+        assertThat(router.decide("인덱스 오류가 나. 내가 직접 원인을 찾게 도와줘.", List.of()).mode())
+                .isEqualTo(ConversationRouter.Mode.DEBUG);
+        assertThat(router.decide("인덱스 오류 원인을 직접 설명해 줘.", List.of()).mode())
+                .isEqualTo(ConversationRouter.Mode.DIRECT);
+    }
+
+    @Test void actualErrorReportsAndRepliesUseDebugCoachingWhileDefinitionsStayDirect() {
+        for (String report : List.of("리스트를 반복하는데 마지막에 IndexError가 나.",
+                "파이썬 코드가 실행이 안 돼", "I'm getting an IndexError in my loop", "디버깅 같이 해보자")) {
+            assertThat(router.decide(report, List.of()).mode()).as(report).isEqualTo(ConversationRouter.Mode.DEBUG);
+        }
+        var assistant = ChatMessage.create(null, "assistant", "오류가 난 순간에 인덱스 값은 얼마였나요?", "question", "system", 1);
+        assistant.setResponseStrategy("DEBUG");
+        var history = List.of(assistant);
+        for (String observation : List.of("길이는 3이고 인덱스도 3이야", "3", "모르겠어")) {
+            assertThat(router.decide(observation, history).mode()).as(observation).isEqualTo(ConversationRouter.Mode.DEBUG);
+        }
+        for (String question : List.of("파이썬 인덱스 에러가 뭐야?", "What is IndexError?", "리스트에서 IndexError가 왜 발생해?")) {
+            assertThat(router.decide(question, history).mode()).as(question).isEqualTo(ConversationRouter.Mode.DIRECT);
+        }
+        assertThat(router.decide("반복문에서 에러가 나. 힌트 없이 해결 방법 알려줘.", history).mode())
+                .isEqualTo(ConversationRouter.Mode.DIRECT);
+        assertThat(router.decide("강의 문서 예제에서 에러가 나요.", List.of()).needsDocuments()).isTrue();
     }
 
     @Test void existingRequestAliasesRemainCompatibleAndSelectionIsOptional() {
