@@ -31,6 +31,18 @@ class ChatResponseServicePromptTest {
     }
 
     @Test
+    void groundedFormatAcceptsOnlyCandidateChunkIds() {
+        var candidates = List.of(
+                new DocumentSearchResult("4", "57", "Guide", "Details", 0.4, "alpha", "Intro", 2, List.of("alpha")),
+                new DocumentSearchResult("4", "143", "Guide", "Answer", 0.3, "beta", "Details", 3, List.of("beta")));
+        var format = new ObjectMapper().valueToTree(ChatResponseService.groundedResponseFormat(candidates));
+        var allowedIds = format.at("/format/schema/properties/source_chunk_ids/items/enum");
+        assertThat(allowedIds.size()).isEqualTo(2);
+        assertThat(allowedIds.get(0).asText()).isEqualTo("57");
+        assertThat(allowedIds.get(1).asText()).isEqualTo("143");
+    }
+
+    @Test
     void missingOrUnknownEvidenceDoesNotProduceCitationsOrUnverifiedHints() {
         var candidates = List.of(
                 new DocumentSearchResult("4", "5", "Guide", "Intro", 0.4, "first", "", 1, List.of("first")));
