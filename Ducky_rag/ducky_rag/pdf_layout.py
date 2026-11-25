@@ -50,6 +50,18 @@ def _native_markdown(document, indexes):
     return {index: chunk["text"] for index, chunk in zip(indexes, chunks)}
 
 
+def _text_key(text):
+    # Layout can add emphasis and HTML line breaks inside a native text line.
+    text = re.sub(r"<br\s*/?>", "", text, flags=re.I)
+    return "".join(char.casefold() for char in text if char.isalnum())
+
+
+def _has_omitted_text(raw, markdown):
+    rendered = _text_key(markdown)
+    return any(key and key not in rendered for line in raw.splitlines()
+               if (key := _text_key(line)))
+
+
 def extract_pages(document, scans):
     native_pages = [index for index in range(len(document)) if index not in scans]
     converted = {}
@@ -116,6 +128,14 @@ def extract_pages(document, scans):
             if not body.strip() and raw.strip():
                 failures[page.number] = True
                 body = raw
+            elif _has_omitted_text(raw, f"{title}\n{body}"):
+                # Vector-backed boxes/tables can disappear from an otherwise
+                # successful layout result. Retain its tables, then preserve a
+                # literal, position-sorted transcript of the same page. Do not
+                # invent table headers or label/value relationships from it.
+                transcript = page.get_text("text", sort=True).strip() or raw
+                fence = "`" * (max([2] + [len(run) for run in re.findall(r"`+", transcript)]) + 1)
+                body += f"\n\n## 원문 텍스트\n\n{fence}text\n{transcript}\n{fence}"
         body = body.replace("\r\n", "\n").replace("\r", "\n")
         heading = title or f"PDF page {number}"
         pages.append({"page": number, "title": heading,

@@ -1,6 +1,7 @@
 package com.rubberduck.domain.device.repository;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -14,20 +15,23 @@ import com.rubberduck.domain.device.entity.DeviceCommandStatus;
 
 public interface DeviceCommandRepository extends JpaRepository<DeviceCommand, Long> {
 
-    Optional<DeviceCommand> findFirstByDeviceAndRequestedByAndStatusInOrderByCreatedAtAsc(
+    Optional<DeviceCommand> findFirstByDeviceAndRequestedByAndStatusInOrderByCreatedAtAscIdAsc(
             Device device,
             User requestedBy,
             Collection<DeviceCommandStatus> statuses
     );
 
+    List<DeviceCommand> findAllByDeviceAndRequestedByAndStatusInOrderByCreatedAtAscIdAsc(
+            Device device, User requestedBy, Collection<DeviceCommandStatus> statuses);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    Optional<DeviceCommand> findFirstByDeviceAndRequestedByAndStatusOrderByCreatedAtAsc(
+    Optional<DeviceCommand> findFirstByDeviceAndRequestedByAndStatusOrderByCreatedAtAscIdAsc(
             Device device,
             User requestedBy,
             DeviceCommandStatus status
     );
 
-    Optional<DeviceCommand> findFirstByDeviceAndRequestedByOrderByCreatedAtDesc(Device device, User requestedBy);
+    Optional<DeviceCommand> findFirstByDeviceAndRequestedByOrderByCreatedAtDescIdDesc(Device device, User requestedBy);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<DeviceCommand> findLockedById(Long id);

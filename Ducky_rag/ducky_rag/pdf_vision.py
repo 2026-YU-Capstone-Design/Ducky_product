@@ -74,6 +74,8 @@ class OpenAIPageReader:
         self.key = _key()
 
     def read(self, page, *, supplement, deadline):
+        if deadline - time.monotonic() <= 1:
+            raise PdfVisionError("PDF_VISION_LIMIT")
         try:
             edge = max(page.rect.width, page.rect.height)
             if edge <= 0:
