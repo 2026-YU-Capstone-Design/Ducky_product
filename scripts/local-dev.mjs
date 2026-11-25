@@ -94,7 +94,14 @@ export async function stopOwned(children) {
     if (windows) {
       // Only live processes spawned by this launcher; never search by port or process name.
       if (child.exitCode === null && child.signalCode === null) {
-        spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
+        const result = spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'],
+          { stdio: 'ignore', windowsHide: true, timeout: 5000 });
+        if (result.status !== 0 && child.exitCode === null && child.signalCode === null) {
+          // Restricted Windows sessions can reject taskkill's process-tree lookup.
+          // The child handle still identifies exactly the process this launcher started.
+          child.kill();
+          console.warn(`프로세스 트리 종료를 확인하지 못했습니다. 재시작 전 서비스 포트를 확인하세요 (PID ${child.pid}).`);
+        }
       }
     } else {
       try { process.kill(-child.pid, 'SIGTERM'); } catch (error) { if (error.code !== 'ESRCH') throw error; }
