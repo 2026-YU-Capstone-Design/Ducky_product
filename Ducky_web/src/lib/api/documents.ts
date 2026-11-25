@@ -25,8 +25,8 @@ export function listDocuments() {
   });
 }
 
-export function getDocument(documentId: string) {
-  return apiRequest<LearningMaterial>(`/api/documents/${documentId}`, { method: "GET", auth: true });
+export function getDocument(documentId: string, signal?: AbortSignal) {
+  return apiRequest<LearningMaterial>(`/api/documents/${documentId}`, { method: "GET", auth: true, signal });
 }
 
 export function isDocumentProcessing(status: string) {
@@ -60,15 +60,34 @@ export function documentProcessingErrorMessage(code: string) {
   }
 }
 
-export async function waitForDocument(document: LearningMaterial, signal?: AbortSignal) {
+export async function waitForDocument(
+  document: LearningMaterial,
+  signal?: AbortSignal,
+  onStatus?: (status: LearningMaterial["indexingStatus"]) => void,
+) {
   const deadline = Date.now() + 330_000;
+  const timeoutMessage = "문서 처리 시간이 길어지고 있습니다. 자료실에서 상태를 확인해 주세요.";
   let current = document;
+  let previousStatus: LearningMaterial["indexingStatus"] | undefined;
   while (isDocumentProcessing(current.indexingStatus)) {
     signal?.throwIfAborted();
-    if (Date.now() > deadline) throw new Error("문서 처리 시간이 길어지고 있습니다. 자료실에서 상태를 확인해 주세요.");
+    if (Date.now() >= deadline) throw new Error(timeoutMessage);
+    if (current.indexingStatus !== previousStatus) {
+      previousStatus = current.indexingStatus;
+      onStatus?.(current.indexingStatus);
+    }
     await new Promise((resolve) => setTimeout(resolve, 1000));
     signal?.throwIfAborted();
-    current = await getDocument(current.id);
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) throw new Error(timeoutMessage);
+    const timeout = AbortSignal.timeout(remaining);
+    try {
+      current = await getDocument(current.id, signal ? AbortSignal.any([signal, timeout]) : timeout);
+    } catch (error) {
+      signal?.throwIfAborted();
+      if (timeout.aborted) throw new Error(timeoutMessage);
+      throw error;
+    }
   }
   if (current.indexingStatus !== "indexed") {
     throw new Error(documentProcessingErrorMessage(current.processingError ?? current.indexingStatus));
@@ -77,7 +96,7 @@ export async function waitForDocument(document: LearningMaterial, signal?: Abort
   return current;
 }
 
-export function uploadDocument(file: File) {
+export function uploadDocument(file: File, signal?: AbortSignal) {
   const formData = new FormData();
   formData.append("file", file);
 
@@ -85,6 +104,7 @@ export function uploadDocument(file: File) {
     method: "POST",
     auth: true,
     body: formData,
+    signal,
   });
 }
 
