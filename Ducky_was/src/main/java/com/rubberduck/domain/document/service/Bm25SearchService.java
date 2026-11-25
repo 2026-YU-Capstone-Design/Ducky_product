@@ -1,11 +1,14 @@
 package com.rubberduck.domain.document.service;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 
@@ -18,6 +21,7 @@ public class Bm25SearchService {
     private static final double B = 0.75d;
     private static final Pattern WORD = Pattern.compile("[\\p{L}\\p{N}_]+");
     private static final Pattern HANGUL_WORD = Pattern.compile("[가-힣]{2,}");
+    private static final Pattern ENGLISH_WORD = Pattern.compile("[a-zA-Z]{2,}");
 
     private record ChunkTerms(Long id, int length, Map<String, Integer> matches) {}
 
@@ -57,6 +61,33 @@ public class Bm25SearchService {
             result.put(chunk.id(), score / (1.0d + score));
         }
         return result;
+    }
+
+    boolean needsEnglishQuery(List<DocumentChunk> chunks, String query, Map<Long, Double> originalScores) {
+        Set<String> koreanTerms = HANGUL_WORD.matcher(query).results()
+                .map(match -> match.group()).collect(Collectors.toSet());
+        if (koreanTerms.isEmpty() || chunks.stream().noneMatch(chunk -> englishDominant(chunk.getContent()))) {
+            return false;
+        }
+
+        Set<String> englishTerms = ENGLISH_WORD.matcher(query.toLowerCase(Locale.ROOT)).results()
+                .map(match -> match.group()).collect(Collectors.toSet());
+        return chunks.stream().filter(chunk -> originalScores.containsKey(chunk.getId()))
+                .max(Comparator.comparingDouble((DocumentChunk chunk) -> originalScores.get(chunk.getId()))
+                        .thenComparing(DocumentChunk::getId, Comparator.reverseOrder()))
+                .map(chunk -> {
+                    String text = chunk.getContent().toLowerCase(Locale.ROOT);
+                    boolean matchesKorean = !englishDominant(text) && HANGUL_WORD.matcher(text).results()
+                            .anyMatch(match -> koreanTerms.contains(match.group()));
+                    long matchingEnglishTerms = ENGLISH_WORD.matcher(text).results().map(match -> match.group())
+                            .filter(englishTerms::contains).distinct().limit(2).count();
+                    return !matchesKorean && matchingEnglishTerms < 2;
+                }).orElse(true);
+    }
+
+    private boolean englishDominant(String text) {
+        long english = ENGLISH_WORD.matcher(text).results().count();
+        return english > HANGUL_WORD.matcher(text).results().count();
     }
 
     private Map<String, Integer> terms(String text) {
