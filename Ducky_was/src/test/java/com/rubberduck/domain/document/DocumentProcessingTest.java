@@ -10,8 +10,10 @@ import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.IntStream;
 
 import com.rubberduck.domain.chat.service.ChatResponseService;
+import com.rubberduck.domain.document.dto.DocumentSearchResult;
 import com.rubberduck.domain.document.repository.DocumentChunkRepository;
 import com.rubberduck.domain.document.repository.LearningDocumentRepository;
 import com.rubberduck.domain.document.service.*;
@@ -91,6 +93,15 @@ class DocumentProcessingTest extends ApiFlowTest {
 
         when(chatResponse.translateDocumentQuery(query)).thenReturn("");
         assertThat(service.search(owner, query, 3, List.of(id)).results()).isEmpty();
+    }
+
+    @Test
+    void documentAnswerContextIncludesTheFifthExcerptWithinTheSourceLimit() {
+        var fragments = IntStream.rangeClosed(1, 6).mapToObj(number -> new DocumentSearchResult(
+                "1", Integer.toString(number), "Chart", "Fragment " + number, 0.5,
+                "block-" + number, "Results", 14, List.of("block-" + number))).toList();
+
+        assertThat(service.toPromptContext(fragments)).contains("Fragment 5").doesNotContain("Fragment 6");
     }
 
     @Test
