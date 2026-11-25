@@ -1,5 +1,6 @@
 """Select PDF pages that need visual recovery and keep their original numbering."""
 from collections import Counter
+from math import sqrt
 import os
 import time
 
@@ -25,6 +26,38 @@ def _is_blank(page):
     gray = page.get_pixmap(matrix=pymupdf.Matrix(scale, scale),
                            colorspace=pymupdf.csGRAY, annots=False)
     return bool(gray.size) and min(gray.samples, default=0) == 255
+
+
+def _prioritize_supplemental_pages(document, candidates, available):
+    if len(candidates) <= available or not available:
+        return candidates[:available]
+
+    images_by_page = {}
+    vector_scores = {}
+    for index in candidates:
+        page = document[index]
+        area = page.rect.get_area()
+        if area <= 0:
+            continue
+        try:
+            images = {}
+            for image in page.get_image_info(hashes=True):
+                coverage = (pymupdf.Rect(image["bbox"]) & page.rect).get_area() / area
+                # Page-sized backgrounds and tiny repeated accents add little information.
+                if 0.025 <= coverage <= 0.93:
+                    digest = image["digest"]
+                    images[digest] = max(images.get(digest, 0), coverage)
+            images_by_page[index] = images
+            paths = [(pymupdf.Rect(bounds) & page.rect).get_area() / area
+                     for kind, bounds in page.get_bboxlog() if kind in VISUAL_PATHS]
+            vector_scores[index] = min(0.08, max((part for part in paths if part <= 0.93), default=0))
+        except (ValueError, RuntimeError):
+            continue
+
+    frequency = Counter(digest for images in images_by_page.values() for digest in images)
+    scores = {index: vector_scores.get(index, 0) + sum(area / sqrt(frequency[digest])
+              for digest, area in images_by_page.get(index, {}).items()) for index in candidates}
+    return sorted(candidates, key=lambda index: (-scores[index], index))[:available]
 
 
 def extract_pdf_pages(document):
@@ -78,7 +111,8 @@ def extract_pdf_pages(document):
     supplemental = [index for index, supplement in sorted(recover.items()) if supplement]
     if len(required) > MAX_VISION_PAGES:
         raise PdfVisionError("PDF_VISION_LIMIT")
-    selected = required + (supplemental[:MAX_VISION_PAGES - len(required)] if model else [])
+    selected = required + (_prioritize_supplemental_pages(document, supplemental, MAX_VISION_PAGES - len(required))
+                           if model else [])
     images_not_enriched = len(selected) < len(recover)
     try:
         reader = OpenAIPageReader(model) if selected else None
