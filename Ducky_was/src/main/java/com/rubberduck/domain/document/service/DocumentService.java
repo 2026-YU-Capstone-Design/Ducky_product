@@ -35,6 +35,7 @@ import tools.jackson.databind.ObjectMapper;
 @RequiredArgsConstructor
 public class DocumentService {
 
+    public static final int DOCUMENT_ANSWER_SOURCE_LIMIT = 5;
     private static final int DEFAULT_SEARCH_LIMIT = 5;
     private static final int MAX_SEARCH_LIMIT = 10;
 
@@ -195,7 +196,7 @@ public class DocumentService {
         }
 
         return results.stream()
-                .limit(3)
+                .limit(DOCUMENT_ANSWER_SOURCE_LIMIT)
                 .map(result -> "[source_chunk_id: " + result.chunkId() + "] "
                         + result.title() + " / " + (result.headingPath() == null ? "" : result.headingPath())
                         + "\n" + truncate(result.content(), 1400))
