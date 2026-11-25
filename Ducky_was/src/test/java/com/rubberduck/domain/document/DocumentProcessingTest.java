@@ -80,7 +80,7 @@ class DocumentProcessingTest extends ApiFlowTest {
         when(worker.process(eq(id), eq("txt"), any())).thenReturn(result(id));
         processing.process(id);
         String query = "최대 몇 번까지 다시 시도하나요?";
-        when(chatResponse.translateDocumentQuery(query)).thenReturn("How many Quasar retries are allowed?");
+        when(chatResponse.translateDocumentQuery(query)).thenReturn("How many times can retries be attempted at most?");
 
         assertThatThrownBy(() -> service.search(other, query, 3, List.of(id))).isInstanceOf(CustomException.class);
         assertThat(service.search(owner, query, 3, List.of()).results()).isEmpty();
