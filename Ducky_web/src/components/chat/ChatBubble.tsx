@@ -1,5 +1,6 @@
 import Image from "next/image";
 import { FileText } from "lucide-react";
+import { AssistantMarkdown } from "./AssistantMarkdown";
 import type { ChatMessage } from "@/types/chat";
 import { cn } from "@/lib/utils";
 
@@ -42,7 +43,7 @@ export function ChatBubble({ message }: ChatBubbleProps) {
 
       <div
         className={cn(
-          "flex max-w-[86%] flex-col gap-[3px] sm:max-w-[74%] xl:max-w-[64%]",
+          "flex min-w-0 max-w-[86%] flex-col gap-[3px] sm:max-w-[74%] xl:max-w-[64%]",
           isUser && "items-end",
         )}
       >
@@ -54,7 +55,7 @@ export function ChatBubble({ message }: ChatBubbleProps) {
 
         <div
           className={cn(
-            "rounded-[14px] px-[15px] py-[11px] text-[13.5px] leading-relaxed [overflow-wrap:anywhere] break-words whitespace-pre-wrap",
+            "min-w-0 rounded-[14px] px-[15px] py-[11px] text-[13.5px] leading-relaxed [overflow-wrap:anywhere]",
             isUser
               ? "rounded-br-[4px] border border-[#F0E0A8] bg-[#FFF9E8] text-[#3D2E0A] dark:border-white/10 dark:bg-[#2A2310] dark:text-[#F0E0C4]"
               : "rounded-bl-[4px] border border-[#F0E0A8] bg-white text-[#3D2E0A] dark:border-white/10 dark:bg-[#211C12] dark:text-[#F0E0C4]",
@@ -62,7 +63,7 @@ export function ChatBubble({ message }: ChatBubbleProps) {
               "border-2 border-[#FECA43] bg-[#FFE9A0] dark:border-[#FECA43] dark:bg-[#46350F]",
           )}
         >
-          {message.content}
+          {isUser ? <div className="whitespace-pre-wrap">{message.content}</div> : <AssistantMarkdown content={message.content} />}
 
           {message.responseMode === "extractive" && (
             <p className="mt-3 text-xs text-gray-500">문서 발췌 모드 · 외부 AI 미사용</p>

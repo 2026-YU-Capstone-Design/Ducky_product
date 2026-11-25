@@ -1,4 +1,4 @@
-"""Preserve PDF page boundaries and code text-layer reading order, without OCR."""
+"""Preserve PDF page boundaries, text-layer layout, and OCR provenance."""
 import re
 from collections import Counter
 
@@ -42,11 +42,45 @@ def page_title(page):
     return (title, [line["bbox"] for line in title_lines]) if len(title) <= 240 else ("", [])
 
 
-def extract_pages(document):
-    converted = pymupdf4llm.to_markdown(document, page_chunks=True, hdr_info=False,
-                                       write_images=False, force_text=True)
+def _native_markdown(document, indexes):
+    chunks = pymupdf4llm.to_markdown(document, pages=indexes, page_chunks=True, hdr_info=False,
+                                    write_images=False, force_text=True)
+    if len(chunks) != len(indexes) or any(not isinstance(chunk.get("text"), str) for chunk in chunks):
+        raise ValueError("Incomplete PDF layout")
+    return {index: chunk["text"] for index, chunk in zip(indexes, chunks)}
+
+
+def extract_pages(document, scans):
+    native_pages = [index for index in range(len(document)) if index not in scans]
+    converted = {}
+    if native_pages:
+        try:
+            converted = _native_markdown(document, native_pages)
+        except Exception:
+            # A broken page must not force visual recovery of unaffected pages.
+            for index in native_pages:
+                try:
+                    converted.update(_native_markdown(document, [index]))
+                except Exception:
+                    continue
+
+    failures = {}
     pages = []
-    for number, (page, item) in enumerate(zip(document, converted), 1):
+    for number, page in enumerate(document, 1):
+        heading = f"PDF page {number}"
+        if page.number in scans:
+            pages.append({"page": number, "title": heading, "extraction": "ocr",
+                          "markdown": f"# {heading}\n\n{scans[page.number]}".rstrip("\n")})
+            continue
+        if page.number not in converted:
+            try:
+                raw = page.get_text("text", sort=True).strip()
+            except (ValueError, RuntimeError):
+                raw = ""
+            failures[page.number] = bool(raw and not PAGE_NUMBER.fullmatch(raw))
+            pages.append({"page": number, "title": heading,
+                          "markdown": f"# {heading}\n\n{raw}".rstrip("\n")})
+            continue
         title, title_boxes = page_title(page)
         body_blocks = []
         footers = []
@@ -72,7 +106,7 @@ def extract_pages(document):
             fence = "`" * width
             body = f"{fence}text\n{raw}\n{fence}"
         else:
-            body = item["text"].strip("\n")
+            body = converted[page.number].strip("\n")
             lines = body.splitlines()
             while lines and (not lines[-1].strip() or lines[-1].strip(" *_") in footers):
                 lines.pop()
@@ -80,12 +114,13 @@ def extract_pages(document):
                 lines.pop(0)
             body = "\n".join(lines).strip("\n")
             if not body.strip() and raw.strip():
+                failures[page.number] = True
                 body = raw
         body = body.replace("\r\n", "\n").replace("\r", "\n")
         heading = title or f"PDF page {number}"
         pages.append({"page": number, "title": heading,
                       "markdown": f"# {heading}\n\n{body}".rstrip("\n")})
-    return pages
+    return pages, failures
 
 
 def locate_pages(markdown, body, pages):
@@ -94,7 +129,10 @@ def locate_pages(markdown, body, pages):
     ranges = []
     for page in pages:
         length = page["markdown"].count("\n")
-        ranges.append({"page": page["page"], "title": page["title"],
-                       "line_start": start, "line_end": start + length})
+        source = {"page": page["page"], "title": page["title"], "extraction": page.get("extraction"),
+                  "line_start": start, "line_end": start + length}
+        if "vision_line_offset" in page:
+            source["vision_line_start"] = start + page["vision_line_offset"]
+        ranges.append(source)
         start += length + 2
     return ranges

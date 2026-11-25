@@ -13,6 +13,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 import com.rubberduck.domain.chat.service.ChatService;
 import com.rubberduck.domain.chat.dto.MessageResponse;
+import com.rubberduck.domain.document.dto.DocumentSearchResult;
 import com.rubberduck.domain.document.entity.*;
 import com.rubberduck.domain.document.repository.*;
 import com.rubberduck.domain.document.service.SparseEmbeddingService;
@@ -167,6 +168,29 @@ class ConversationHarnessTest extends ApiFlowTest {
         assertThat(reply.sources()).isEmpty();
     }
 
+    @Test void bareDocumentReviewSamplesOnlyTheSelectedIndexedMaterialAndPersistsSources() {
+        var user = newUser("portfolio-review");
+        Long selected = document(user, "Quasar retry budget is seven attempts.", true);
+        Long pending = document(user, "Pending material", false);
+        document(user, "Unselected material", true);
+        document(newUser("other-review"), "Foreign material", true);
+
+        Long id = session(user);
+        var reply = chat.sendMessage(user, id, "피드백해줘", "text", List.of(selected, pending)).aiResponse();
+        assertThat(reply.responseStrategy()).isEqualTo("REVIEW");
+        assertThat(reply.sources()).extracting(DocumentSearchResult::documentId).containsExactly(selected.toString());
+        assertThat(reply.hintNumber()).isNull();
+        assertThat(reply.content()).contains("살펴보세요", "검토할 발췌");
+        assertRestored(user, id, reply);
+
+        var noTarget = chat.sendMessage(user, session(user), "피드백해줘", "text", List.of()).aiResponse();
+        assertThat(noTarget.responseStrategy()).isEqualTo("CLARIFY");
+        assertThat(noTarget.sources()).isEmpty();
+        var notIndexed = chat.sendMessage(user, session(user), "피드백해줘", "text", List.of(pending)).aiResponse();
+        assertThat(notIndexed.responseStrategy()).isEqualTo("INSUFFICIENT_EVIDENCE");
+        assertThat(notIndexed.sources()).isEmpty();
+    }
+
     @Test void generalIntentAfterDocumentTurnDoesNotSearchOrDiscardStoredSelection() {
         var user = newUser("general-switch"); Long id = session(user);
         Long selected = document(user, "Python list policy", true);
@@ -305,6 +329,11 @@ class ConversationHarnessTest extends ApiFlowTest {
         assertThat(second.hintNumber()).isEqualTo(2);
         assertThat(third.hintNumber()).isEqualTo(3);
         assertThat(second.content()).isNotEqualTo(first.content());
+        var feature = chat.sendMessage(user, id, "힌트 기능이 뭐야? 기능 자체만 짧게 설명해줘.", "text").aiResponse();
+        assertThat(feature.responseStrategy()).isEqualTo("DIRECT");
+        assertThat(feature.type()).isEqualTo("answer");
+        assertThat(feature.hintNumber()).isNull();
+        assertThat(chat.getConversation(user, id).hintCount()).isEqualTo(3);
         assertThat(chat.sendMessage(user, id, "힌트 말고 정답을 설명해", "text").aiResponse().type()).isEqualTo("answer");
     }
 

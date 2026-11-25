@@ -7,7 +7,9 @@ import time
 
 import pymupdf
 from .normalization import finalize_markdown, build_canonical_blocks
-from .pdf_layout import extract_pages, locate_pages
+from .pdf_extraction import extract_pdf_pages
+from .pdf_layout import locate_pages
+from .pdf_vision import PdfVisionError
 from .chunking import build_chunks, CHUNKER_VERSION
 
 SCHEMA_VERSION = "ducky-document-v1"
@@ -32,6 +34,7 @@ def process_document(data: bytes, document_id: str, source_type: str, *,
     warnings = []
     page_count = None
     pdf_pages = []
+    scanned = False
     if source_type == "pdf":
         if not data.startswith(b"%PDF-"):
             raise ProcessingError("INVALID_PDF")
@@ -45,16 +48,10 @@ def process_document(data: bytes, document_id: str, source_type: str, *,
             page_count = len(document)
             if page_count > MAX_PAGES:
                 raise ProcessingError("PAGE_LIMIT")
-            # A scanned/empty page must not silently become an indexed document.
-            missing = [i + 1 for i, page in enumerate(document)
-                       if not page.get_text().strip() and page.get_images()]
-            if missing:
-                raise ProcessingError("OCR_REQUIRED")
-            image_count = sum(len(page.get_images()) for page in document)
-            if image_count:
-                warnings.append("IMAGES_NOT_ENRICHED")
-            # Extract text first; image content needs a separate OCR path.
-            pdf_pages = extract_pages(document)
+            try:
+                pdf_pages, warnings, scanned = extract_pdf_pages(document)
+            except PdfVisionError as error:
+                raise ProcessingError(str(error)) from error
             body = "\n\n".join(p["markdown"] for p in pdf_pages)
     elif source_type in {"txt", "md", "csv", "json"}:
         try:
@@ -69,10 +66,15 @@ def process_document(data: bytes, document_id: str, source_type: str, *,
     blocks, report = build_canonical_blocks(markdown, doc_id=document_id,
         markdown_key=markdown_key or f"markdown/{document_id}/document.md",
         pdf_pages=locate_pages(markdown, body, pdf_pages) if pdf_pages else None)
+    visual_pages = {page["page"] for page in pdf_pages if "vision_line_offset" in page}
+    searchable_visual_pages = {block["source"]["page"] for block in blocks
+                               if block["searchable"] and block["source"].get("extraction") == "vision"}
+    if not visual_pages.issubset(searchable_visual_pages):
+        raise ProcessingError("PDF_VISION_UNREADABLE")
     report["chunker_version"] = CHUNKER_VERSION
     chunks = build_chunks(blocks, source_type)
     if not chunks:
-        raise ProcessingError("NO_SEARCHABLE_TEXT")
+        raise ProcessingError("OCR_NO_TEXT" if scanned else "NO_SEARCHABLE_TEXT")
     if len(chunks) > MAX_CHUNKS:
         raise ProcessingError("CHUNK_LIMIT")
     return {

@@ -128,6 +128,10 @@ def build_canonical_blocks(markdown: str, *, doc_id: str,
             page = next((p for p in pdf_pages if p["line_start"] <= start <= p["line_end"]), None)
             if page:
                 block["source"]["page"] = page["page"]
+                if start >= page.get("vision_line_start", page["line_end"] + 1):
+                    block["source"]["extraction"] = "vision"
+                elif page.get("extraction") == "ocr":
+                    block["source"]["extraction"] = "ocr"
         block["attrs"].update(searchable=block["searchable"], search_role=role)
         blocks.append(block)
         return block

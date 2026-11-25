@@ -22,8 +22,14 @@ function load(relative) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
   }).outputText;
   const localRequire = (name) => {
-    if (name.startsWith('@/')) return load(`${name.slice(2)}.ts`);
-    if (name.startsWith('.')) return load(path.relative(path.resolve(__dirname, '../src'), path.resolve(path.dirname(file), `${name}.ts`)));
+    if (name.endsWith('.css')) return { default: {} };
+    const sourceRoot = path.resolve(__dirname, '../src');
+    if (name.startsWith('@/') || name.startsWith('.')) {
+      const base = name.startsWith('@/') ? path.resolve(sourceRoot, name.slice(2)) : path.resolve(path.dirname(file), name);
+      const target = ['.ts', '.tsx'].map(extension => base + extension).find(candidate => fs.existsSync(candidate));
+      assert.ok(target, `Cannot resolve ${name} from ${file}`);
+      return load(path.relative(sourceRoot, target));
+    }
     return require(name);
   };
   new Function('require', 'module', 'exports', code)(localRequire, compiledModule, compiledModule.exports);
@@ -96,6 +102,8 @@ test('processing and processed continue polling until indexed; processed is neve
 
 test('failure/OCR/exclusion/timeout/cancellation do not return searchable documents', async () => {
   await assert.rejects(docs.waitForDocument({ indexingStatus: 'failed', processingError: 'OCR_REQUIRED' }), Error);
+  await assert.rejects(docs.waitForDocument({ indexingStatus: 'failed', processingError: 'PDF_VISION_UNREADABLE' }),
+    /일부 페이지를 읽지 못해 색인을 완료하지 못했습니다/);
   await assert.rejects(docs.waitForDocument({ indexingStatus: 'excluded' }), Error);
   await assert.rejects(docs.waitForDocument({ indexingStatus: 'indexed', ragEnabled: false }), Error);
   const controller = new AbortController();
@@ -136,6 +144,31 @@ test('answer source renders the document and PDF page, with a fallback for legac
   assert.match(html, /문서 19/);
   const legacy = renderToStaticMarkup(React.createElement(ChatBubble, { message: { ...message, sources: [{ ...source, pageNumber: null }] } }));
   assert.match(legacy, /쪽 정보 없음/);
+});
+
+test('assistant Markdown renders code and math while keeping raw HTML and remote images inactive', () => {
+  const { AssistantMarkdown } = load('components/chat/AssistantMarkdown.tsx');
+  const content = [
+    '**bold**',
+    '',
+    '```text',
+    String.raw`\(leave_code_plain\)`,
+    '```',
+    '',
+    String.raw`inline $x^2$ and \(y^2\)`,
+    '',
+    String.raw`\[z^2\]`,
+    '',
+    '<div data-fixture>raw HTML</div>',
+    '',
+    '![remote image](https://example.invalid/fixture.png)',
+  ].join('\n');
+  const html = renderToStaticMarkup(React.createElement(AssistantMarkdown, { content }));
+  assert.match(html, /<strong>bold<\/strong>/);
+  assert.match(html, /<pre><code class="language-text">\\\(leave_code_plain\\\)/);
+  assert.equal((html.match(/class="katex"/g) ?? []).length, 3);
+  assert.match(html, /class="katex-display"/);
+  assert.doesNotMatch(html, /data-fixture|example\.invalid|<img/);
 });
 
 test('signed-out requests never fetch and late account-A responses are rejected after switching to B', async () => {
