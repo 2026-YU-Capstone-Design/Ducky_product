@@ -10,7 +10,7 @@ import { VoiceInputButton } from "./VoiceInputButton";
 interface ChatInputProps {
   disabled?: boolean;
   onChange: (value: string) => void;
-  onSend: (payload: { text: string; files?: File[] }) => void;
+  onSend: (payload: { text: string; files?: File[] }) => Promise<boolean>;
   onVoiceCancel: () => void;
   onVoiceStart: () => void;
   value: string;
@@ -35,13 +35,14 @@ export function ChatInput({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const canSend = value.trim().length > 0 || files.length > 0;
 
-  const send = () => {
+  const send = async () => {
     if (!canSend || disabled) return;
 
-    onSend({
+    const sent = await onSend({
       text: value,
       files,
     });
+    if (!sent) return;
 
     onChange("");
     setFiles([]);
@@ -57,7 +58,7 @@ export function ChatInput({
       className="border-t border-[#F0E0A8] bg-white px-3 py-3 transition-colors dark:border-[#5C4413]/40 dark:bg-[#221C0D] sm:px-4 lg:px-5"
       onSubmit={(event) => {
         event.preventDefault();
-        send();
+        void send();
       }}
     >
       {files.length > 0 && (
@@ -91,6 +92,7 @@ export function ChatInput({
           <Paperclip className="size-4" aria-hidden="true" />
           <span className="sr-only">세션 자료 첨부</span>
           <input
+            disabled={disabled}
             ref={fileInputRef}
             accept={ACCEPTED_ATTACHMENT_TYPES}
             type="file"
@@ -113,7 +115,7 @@ export function ChatInput({
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) {
               event.preventDefault();
-              send();
+              void send();
             }
           }}
         />

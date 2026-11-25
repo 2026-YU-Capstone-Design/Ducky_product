@@ -58,6 +58,9 @@ export function toChatMessage(message: BackendChatMessage): ChatMessage {
     content: message.content,
     type: toChatMessageType(message.type),
     createdAt: message.createdAt,
+    sources: message.sources,
+    responseMode: message.responseMode,
+    responseStrategy: message.responseStrategy,
     ...(hintLevel ? { hintLevel } : {}),
     ...(message.hintNumber ? { hintNumber: message.hintNumber } : {}),
   };

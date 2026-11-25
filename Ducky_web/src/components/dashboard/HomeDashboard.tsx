@@ -176,8 +176,8 @@ export function HomeDashboard() {
                   해볼까요?
                 </h1>
                 <p className="mt-3 max-w-sm text-sm leading-relaxed text-gray-500 break-keep dark:text-gray-400">
-                  Ducky가 답을 바로 주기보다 생각을 정리할 수 있는 질문을
-                  이어갑니다.
+                  궁금한 내용은 바로 물어보세요. 힌트가 필요하면 생각을
+                  정리할 수 있는 질문으로 도와드립니다.
                 </p>
               </div>
 

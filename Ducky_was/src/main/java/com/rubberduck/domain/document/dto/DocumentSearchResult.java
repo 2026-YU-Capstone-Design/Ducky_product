@@ -5,6 +5,9 @@ public record DocumentSearchResult(
         String chunkId,
         String title,
         String content,
-        double score
+        double score,
+        String blockId,
+        String headingPath,
+        Integer pageNumber
 ) {
 }

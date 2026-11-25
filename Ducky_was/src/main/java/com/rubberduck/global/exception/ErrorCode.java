@@ -18,6 +18,9 @@ public enum ErrorCode {
     INVALID_REQUEST(400, "요청 값이 올바르지 않습니다"),
     SESSION_NOT_FOUND(404, "세션을 찾을 수 없습니다"),
     DOCUMENT_NOT_FOUND(404, "문서를 찾을 수 없습니다"),
+    DOCUMENT_STORAGE_UNAVAILABLE(503, "문서 저장소를 사용할 수 없습니다"),
+    DOCUMENT_RETRY_NOT_ALLOWED(409, "실패한 문서만 다시 처리할 수 있습니다"),
+    UNSUPPORTED_DOCUMENT_TYPE(400, "지원하지 않는 문서 형식입니다"),
     CHAT_RESPONSE_UNAVAILABLE(503, "채팅 응답 서비스를 사용할 수 없습니다"),
     INTERNAL_SERVER_ERROR(500, "서버 오류가 발생했습니다");
 

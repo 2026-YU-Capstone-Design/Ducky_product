@@ -8,6 +8,9 @@ export interface BackendChatMessage {
   createdAt: string;
   hintLevel?: number | null;
   hintNumber?: number | null;
+  sources?: import("./documents").DocumentSearchResult[];
+  responseMode?: string | null;
+  responseStrategy?: string | null;
 }
 
 export interface BackendConversationSummary {
@@ -77,6 +80,7 @@ export function sendChatMessage(payload: {
   conversationId: string;
   message: string;
   inputType?: "text" | "voice";
+  documentIds?: number[];
 }) {
   return apiRequest<BackendChatTurn>("/api/chat/messages", {
     method: "POST",
@@ -85,6 +89,7 @@ export function sendChatMessage(payload: {
       conversationId: Number(payload.conversationId),
       message: payload.message,
       inputType: payload.inputType ?? "text",
+      ...(payload.documentIds !== undefined ? { documentIds: payload.documentIds } : {}),
     },
   });
 }

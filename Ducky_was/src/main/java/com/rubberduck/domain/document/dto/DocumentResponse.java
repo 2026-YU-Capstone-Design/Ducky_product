@@ -13,10 +13,24 @@ public record DocumentResponse(
         boolean ragEnabled,
         String indexingStatus,
         String uploadedAt,
-        String lastUsedAt
+        String lastUsedAt,
+        String processingError,
+        String processingWarnings,
+        Integer chunkCount,
+        Double processingSeconds,
+        String attemptId,
+        String sourceType,
+        String sourceSha256,
+        String sourceVersionId,
+        String sourceETag,
+        boolean retryAllowed
 ) {
 
     public static DocumentResponse from(LearningDocument document) {
+        return from(document,false);
+    }
+
+    public static DocumentResponse from(LearningDocument document, boolean retryAllowed) {
         return new DocumentResponse(
                 String.valueOf(document.getId()),
                 document.getTitle(),
@@ -28,7 +42,17 @@ public record DocumentResponse(
                 document.isRagEnabled(),
                 document.getIndexingStatus(),
                 document.getCreatedAt().toString(),
-                null
+                null,
+                document.getProcessingError(),
+                document.getProcessingWarnings(),
+                document.getChunkCount(),
+                document.getProcessingSeconds(),
+                document.getAttemptId(),
+                document.getSourceType(),
+                document.getSourceSha256(),
+                document.getSourceVersionId(),
+                document.getSourceETag(),
+                retryAllowed
         );
     }
 }

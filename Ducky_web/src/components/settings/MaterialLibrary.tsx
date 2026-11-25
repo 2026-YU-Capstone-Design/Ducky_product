@@ -30,6 +30,9 @@ import {
   deleteDocument,
   listDocuments,
   uploadDocument,
+  retryDocument,
+  isDocumentProcessing,
+  isDocumentSearchable,
 } from "@/lib/api/documents";
 import { cn } from "@/lib/utils";
 import type {
@@ -68,10 +71,14 @@ const indexingLabels: Record<LearningMaterialIndexingStatus, string> = {
   excluded: "RAG 제외",
   failed: "색인 실패",
   indexed: "색인 완료",
+  processing: "문서 처리 중",
+  processed: "변환 완료 · 색인 대기",
   pending: "색인 대기",
 };
 
 const indexingStyles: Record<LearningMaterialIndexingStatus, string> = {
+  processed: "border-[#C9D7E2] bg-[#EAF4F8] text-[#245C7A]",
+  processing: "border-[#C9D7E2] bg-[#EAF4F8] text-[#245C7A]",
   excluded:
     "border-[#E1E5EA] bg-white text-gray-500 dark:border-white/10 dark:bg-[#1E1B16] dark:text-gray-400",
   failed:
@@ -124,11 +131,44 @@ export function MaterialLibrary() {
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+  const [retryingIds, setRetryingIds] = useState<Set<string>>(new Set());
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const hasPending = materials.some((material) =>
+    isDocumentProcessing(material.indexingStatus));
+
+  useEffect(() => {
+    if (!hasPending) return;
+    let active = true;
+    let timer: ReturnType<typeof setTimeout>;
+    async function poll() {
+      try {
+        const updated = await listDocuments();
+        if (active) setMaterials(updated);
+      } catch (error) {
+        if (active) setErrorMessage(error instanceof Error ? error.message : "처리 상태를 불러오지 못했습니다.");
+      }
+      if (active) timer = setTimeout(poll, 2000);
+    }
+    timer = setTimeout(poll, 2000);
+    return () => { active = false; clearTimeout(timer); };
+  }, [hasPending]);
+
+  async function retryMaterial(id: string) {
+    setErrorMessage(null);
+    setRetryingIds((ids) => new Set(ids).add(id));
+    try {
+      const updated = await retryDocument(id);
+      setMaterials((items) => items.map((item) => item.id === id ? updated : item));
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "재처리 요청에 실패했습니다.");
+    } finally {
+      setRetryingIds((ids) => { const next = new Set(ids); next.delete(id); return next; });
+    }
+  }
 
   const indexedCount = useMemo(
     () =>
-      materials.filter((material) => material.indexingStatus === "indexed")
+      materials.filter(isDocumentSearchable)
         .length,
     [materials],
   );
@@ -200,20 +240,11 @@ export function MaterialLibrary() {
     setErrorMessage(null);
 
     try {
-      const uploadedMaterials: LearningMaterial[] = [];
       for (const file of nextFiles) {
-        uploadedMaterials.push(await uploadDocument(file));
+        if (file.size > 20 * 1024 * 1024) throw new Error("파일은 20MB 이하로 올려 주세요.");
+        const uploaded = await uploadDocument(file);
+        setMaterials((items) => [uploaded, ...items.filter((item) => item.id !== uploaded.id)]);
       }
-
-      setMaterials((currentMaterials) => [
-        ...uploadedMaterials,
-        ...currentMaterials.filter(
-          (material) =>
-            !uploadedMaterials.some(
-              (uploadedMaterial) => uploadedMaterial.id === material.id,
-            ),
-        ),
-      ]);
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "자료 업로드에 실패했습니다.",
@@ -319,7 +350,7 @@ export function MaterialLibrary() {
           <div className="bg-amber-50/50 p-4 dark:bg-white/[0.03]">
             <Search className="size-5 text-[#236B35]" aria-hidden="true" />
             <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
-              색인 완료
+              검색 가능
             </p>
             <p className="mt-1 text-2xl font-bold text-gray-950 dark:text-white">
               {indexedCount}
@@ -428,6 +459,19 @@ export function MaterialLibrary() {
                       {sourceLabels[material.source]} /{" "}
                       {formatDate(material.uploadedAt)}
                     </p>
+                    {material.processingError && (
+                      <p className="mt-2 text-xs text-red-700" role="status">
+                        {material.processingError === "OCR_REQUIRED"
+                          ? "이미지로만 된 페이지가 있어 OCR 처리가 필요합니다. 텍스트를 선택할 수 있는 PDF로 올려 주세요."
+                          : `문서 처리 실패: ${material.processingError}`}
+                      </p>
+                    )}
+                    {material.processingWarnings?.includes("IMAGES_NOT_ENRICHED") && (
+                      <p className="mt-2 text-xs text-amber-800">문서의 텍스트를 검색합니다. 이미지 속 내용은 아직 인식하지 않았습니다.</p>
+                    )}
+                    {material.chunkCount != null && (
+                      <p className="mt-1 text-xs text-gray-500">검색 단위 {material.chunkCount}개</p>
+                    )}
                   </div>
                 </div>
 
@@ -441,6 +485,16 @@ export function MaterialLibrary() {
                   >
                     {indexingLabels[material.indexingStatus]}
                   </Badge>
+                  <span className="text-xs text-gray-500" role="status">
+                    {isDocumentSearchable(material) ? "검색 가능" : "검색 불가"}
+                  </span>
+                  {material.indexingStatus === "failed" && (
+                    <Button size="sm" variant="outline" disabled={retryingIds.has(material.id) || material.retryAllowed === false}
+                      onClick={() => void retryMaterial(material.id)}>다시 처리</Button>
+                  )}
+                  {material.indexingStatus === "failed" && material.retryAllowed === false && (
+                    <span className="text-xs text-gray-500">재처리에 필요한 원본 정보를 확인해야 합니다.</span>
+                  )}
                   <label
                     className="flex items-center gap-2 text-xs font-bold text-gray-600 dark:text-gray-300"
                     htmlFor={`rag-${material.id}`}

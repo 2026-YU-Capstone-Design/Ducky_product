@@ -37,6 +37,7 @@ public class ChatService {
     private final DeviceService deviceService;
     private final ChatResponseService chatResponseService;
     private final DocumentService documentService;
+    private final ConversationRouter conversationRouter;
 
     @Transactional
     public ConversationSummaryResponse startConversation(
@@ -67,9 +68,18 @@ public class ChatService {
 
     @Transactional
     public ChatTurnResponse sendMessage(User user, Long conversationId, String messageText, String inputType) {
+        return sendMessage(user, conversationId, messageText, inputType, null);
+    }
+
+    @Transactional
+    public ChatTurnResponse sendMessage(User user, Long conversationId, String messageText, String inputType, List<Long> documentIds) {
         Conversation conversation = getConversationEntity(conversationId);
         ensureOwner(conversation, user);
-        return appendUserTurn(user, conversation, messageText, inputType, null);
+        if (documentIds != null) {
+            documentIds.forEach(id -> documentService.get(user, id));
+            conversation.setSelectedDocumentIdsJson(new tools.jackson.databind.ObjectMapper().writeValueAsString(documentIds));
+        }
+        return appendUserTurn(user, conversation, messageText, inputType, null, documentIds != null && !documentIds.isEmpty());
     }
 
     @Transactional
@@ -92,7 +102,7 @@ public class ChatService {
             conversation.setDevice(device);
         }
 
-        return appendUserTurn(user, conversation, messageText, inputType == null ? "voice" : inputType, learningType);
+        return appendUserTurn(user, conversation, messageText, inputType == null ? "voice" : inputType, learningType, false);
     }
 
     @Transactional
@@ -157,7 +167,8 @@ public class ChatService {
             Conversation conversation,
             String messageText,
             String inputType,
-            Map<String, String> learningType
+            Map<String, String> learningType,
+            boolean explicitDocumentContext
     ) {
         String normalizedText = requireText(messageText);
         boolean completion = isCompletionText(normalizedText);
@@ -177,12 +188,17 @@ public class ChatService {
         }
         conversation.increaseMessageCount();
 
-        String documentContext = completion
-                ? ""
-                : documentService.toPromptContext(documentService.searchResults(user, normalizedText, 3));
+        List<Long> selectedIds = conversation.getSelectedDocumentIdsJson() == null ? null
+                : new tools.jackson.databind.ObjectMapper().readValue(conversation.getSelectedDocumentIdsJson(),
+                    new tools.jackson.core.type.TypeReference<List<Long>>() {});
+        var decision = conversationRouter.decide(normalizedText, conversationHistory, explicitDocumentContext);
+        var sources = !completion && decision.needsDocuments()
+                ? documentService.search(user, decision.searchQuery(), 3, selectedIds).results()
+                : java.util.List.<com.rubberduck.domain.document.dto.DocumentSearchResult>of();
+        String documentContext = documentService.toPromptContext(sources);
         AiReply aiReply = completion
-                ? new AiReply(chatResponseService.generateCompletionFeedback(user, conversation, conversationHistory), "feedback")
-                : chatResponseService.generateTurn(normalizedText, user, documentContext, conversationHistory, learningType);
+                ? new AiReply(chatResponseService.generateCompletionFeedback(user, conversation, conversationHistory), "feedback", chatResponseService.responseMode())
+                : chatResponseService.generateRoutedTurn(normalizedText, user, documentContext, conversationHistory, learningType, decision);
 
         ChatMessage aiMessage = ChatMessage.create(
                 conversation,
@@ -192,6 +208,16 @@ public class ChatService {
                 "system",
                 userSequence + 1
         );
+        aiMessage.setSources(sources);
+        aiMessage.setResponseStrategy(completion ? "COMPLETION" : decision.needsDocuments() && sources.isEmpty()
+                ? "INSUFFICIENT_EVIDENCE" : decision.mode().name());
+        if ("hint".equals(aiReply.type())) {
+            int number = conversation.getHintCount() + 1;
+            aiMessage.setHintNumber(number);
+            aiMessage.setHintLevel(Math.min(((number - 1) / 2) + 1, 3));
+            conversation.increaseHintCount();
+        }
+        aiMessage.setResponseMode(aiReply.responseMode());
         conversation.increaseMessageCount();
 
         if (completion) {
@@ -220,18 +246,25 @@ public class ChatService {
                 .toList();
         int hintNumber = conversation.getHintCount() + 1;
         int hintLevel = Math.min(((hintNumber - 1) / 2) + 1, 3);
-        ChatMessage hintMessage = ChatMessage.create(
-                conversation,
-                "assistant",
-                chatResponseService.generateHint(user, conversation, hintNumber, conversationHistory, previousHints),
-                "hint",
-                "system",
-                conversation.getMessageCount() + 1
-        );
-        hintMessage.setHintNumber(hintNumber);
-        hintMessage.setHintLevel(hintLevel);
-
-        conversation.increaseHintCount();
+        List<Long> selectedIds = conversation.getSelectedDocumentIdsJson() == null ? null
+                : new tools.jackson.databind.ObjectMapper().readValue(conversation.getSelectedDocumentIdsJson(),
+                    new tools.jackson.core.type.TypeReference<List<Long>>() {});
+        var routed = conversationRouter.decide("다음 힌트", conversationHistory);
+        var sources = routed.needsDocuments()
+                ? documentService.search(user, routed.searchQuery(), 3, selectedIds).results()
+                : java.util.List.<com.rubberduck.domain.document.dto.DocumentSearchResult>of();
+        AiReply reply = routed.needsDocuments() || routed.mode() == ConversationRouter.Mode.CLARIFY
+                ? chatResponseService.generateRoutedTurn("다음 힌트", user, documentService.toPromptContext(sources), conversationHistory, null, routed)
+                : new AiReply(chatResponseService.generateHint(user, conversation, hintNumber, conversationHistory, previousHints), "hint", chatResponseService.responseMode());
+        ChatMessage hintMessage = ChatMessage.create(conversation, "assistant", reply.content(), reply.type(), "system", conversation.getMessageCount() + 1);
+        hintMessage.setSources(sources);
+        hintMessage.setResponseStrategy(routed.needsDocuments() && sources.isEmpty() ? "INSUFFICIENT_EVIDENCE" : routed.mode().name());
+        hintMessage.setResponseMode(reply.responseMode());
+        if ("hint".equals(reply.type())) {
+            hintMessage.setHintNumber(hintNumber);
+            hintMessage.setHintLevel(hintLevel);
+            conversation.increaseHintCount();
+        }
         conversation.increaseMessageCount();
 
         chatMessageRepository.save(hintMessage);
@@ -258,6 +291,7 @@ public class ChatService {
                 "system",
                 conversation.getMessageCount() + 1
         );
+        feedbackMessage.setResponseMode(chatResponseService.responseMode());
         conversation.increaseMessageCount();
 
         chatMessageRepository.save(feedbackMessage);
@@ -329,11 +363,11 @@ public class ChatService {
 
     private boolean isCompletionText(String text) {
         String normalized = text.replaceAll("\\s+", "");
-        return normalized.contains("알겠어")
-                || normalized.contains("이해했어")
-                || normalized.contains("끝낼게")
-                || normalized.contains("끝내")
-                || normalized.contains("그만")
-                || normalized.contains("완료");
+        return normalized.equals("알겠어")
+                || normalized.equals("이해했어")
+                || normalized.equals("끝낼게")
+                || normalized.equals("끝내")
+                || normalized.equals("그만")
+                || normalized.equals("완료");
     }
 }

@@ -2,6 +2,11 @@ spring:
   application:
     name: rubberduck
 
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 21MB
+
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/rubberduck}
     username: ${DB_USERNAME:rubberduck}
@@ -48,3 +53,24 @@ app:
 
 server:
   port: 8080
+
+document:
+  mode: ${DOCUMENT_MODE:local}
+  cloud:
+    bucket: ${DOCUMENT_BUCKET:}
+    region: ${DOCUMENT_REGION:ap-southeast-2}
+    completion-queue-url: ${DOCUMENT_COMPLETION_QUEUE_URL:}
+    processor-revision: ${RAG_PROCESSOR_REVISION:}
+    credentials: ${DOCUMENT_AWS_CREDENTIALS:}
+    profile: ${DOCUMENT_AWS_PROFILE:}
+    endpoint: ${DOCUMENT_AWS_ENDPOINT:}
+    poll-enabled: ${DOCUMENT_COMPLETION_POLL_ENABLED:true}
+    normalizer-version: ${DOCUMENT_NORMALIZER_VERSION:ducky-learning-v2}
+    chunker-version: ${DOCUMENT_CHUNKER_VERSION:ducky-page-chunks-v2}
+  pipeline-enabled: ${DOCUMENT_PIPELINE_ENABLED:false}
+  worker-url: ${RAG_WORKER_URL:http://127.0.0.1:8091}
+  worker-token: ${RAG_WORKER_TOKEN:}
+  storage-root: ${DOCUMENT_STORAGE_ROOT:./data/documents}
+
+chat:
+  response-mode: ${CHAT_RESPONSE_MODE:llm}

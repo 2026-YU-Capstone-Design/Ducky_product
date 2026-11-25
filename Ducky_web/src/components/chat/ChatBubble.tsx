@@ -64,6 +64,28 @@ export function ChatBubble({ message }: ChatBubbleProps) {
         >
           {message.content}
 
+          {message.responseMode === "extractive" && (
+            <p className="mt-3 text-xs text-gray-500">문서 발췌 모드 · 외부 AI 미사용</p>
+          )}
+          {!!message.sources?.length && (
+            <details className="mt-3 border-t border-[#F0E0A8] pt-2 text-xs">
+              <summary className="cursor-pointer font-semibold">참고 문서 {message.sources.length}건</summary>
+              <ul className="mt-2 space-y-3">
+                {message.sources.map((source) => (
+                  <li key={`${source.documentId}-${source.chunkId}`}>
+                    <p className="font-semibold">{source.title}{source.headingPath ? ` / ${source.headingPath}` : ""}</p>
+                    <p className="mt-1 text-gray-500">
+                      문서 {source.documentId} · {source.pageNumber != null && source.pageNumber > 0
+                        ? `PDF ${source.pageNumber}쪽`
+                        : "쪽 정보 없음"}
+                    </p>
+                    <p className="mt-1 whitespace-pre-wrap">{source.content}</p>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+
           {!!message.attachments?.length && (
             <div className="mt-3 space-y-2">
               {message.attachments.map((attachment) => (

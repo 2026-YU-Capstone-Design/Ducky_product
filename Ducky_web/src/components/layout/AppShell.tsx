@@ -10,6 +10,7 @@ import { clearAccessToken, getAccessToken } from "@/lib/api/client";
 import { clearPersistedUser, persistUser } from "@/lib/auth/storage";
 import { BottomNav } from "./BottomNav";
 import { Sidebar } from "./Sidebar";
+import { useAuthScope } from "@/hooks/useAuthScope";
 
 const MIN_APP_SPLASH_MS = 1100;
 
@@ -35,6 +36,11 @@ function AppLaunchSplash() {
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
+  const scope = useAuthScope();
+  return <AuthenticatedShell key={scope ?? "signed-out"}>{children}</AuthenticatedShell>;
+}
+
+function AuthenticatedShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [profile, setProfile] = useState<User | null>(null);
 

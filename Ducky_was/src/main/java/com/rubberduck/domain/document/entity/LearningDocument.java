@@ -62,6 +62,40 @@ public class LearningDocument {
     @Column(name = "indexing_status", nullable = false, length = 40)
     private String indexingStatus = "pending";
 
+    @Column(name = "source_key", length = 255)
+    private String sourceKey;
+
+    @Column(name = "source_type", length = 20)
+    private String sourceType;
+
+    @Column(name = "source_sha256", length = 64)
+    private String sourceSha256;
+
+    @Column(name = "processing_token", length = 40)
+    private String processingToken;
+
+    @Column(length = 36)
+    private String attemptId;
+    @Column(length = 255)
+    private String sourceBucket;
+    @Column(length = 1024)
+    private String sourceVersionId;
+    @Column(name = "source_etag", length = 128)
+    private String sourceETag;
+    @Column(length = 64)
+    private String completedJobId;
+    @Column(length = 255)
+    private String processorRevision;
+    private Instant processingStartedAt;
+    private Double processingSeconds;
+    private Integer chunkCount;
+
+    @Column(length = 100)
+    private String processingError;
+
+    @Column(length = 2000)
+    private String processingWarnings;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -88,6 +122,14 @@ public class LearningDocument {
 
     public void markIndexed() {
         indexingStatus = "indexed";
+        status = "available";
+        processingError = null;
+    }
+
+    public void markFailed(String error) {
+        indexingStatus = "failed";
+        status = "review_required";
+        processingError = error;
     }
 
     @PrePersist

@@ -71,7 +71,8 @@ public class ChatController {
                 user,
                 request.conversationId(),
                 request.effectiveMessageText(),
-                request.inputType()
+                request.inputType(),
+                request.documentIds()
         ));
     }
 

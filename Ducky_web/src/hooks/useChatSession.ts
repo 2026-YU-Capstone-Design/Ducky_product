@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { uploadDocument, waitForDocument } from "@/lib/api/documents";
 import {
   endConversation,
   getConversation,
@@ -11,7 +12,7 @@ import {
   type BackendChatMessage,
   type BackendConversationSummary,
 } from "@/lib/api/chat";
-import { ApiError, getAccessToken } from "@/lib/api/client";
+import { getAccessToken } from "@/lib/api/client";
 import type {
   ChatAttachment,
   ChatMessage,
@@ -99,6 +100,9 @@ function toChatMessage(
     content: message.content,
     type: toChatMessageType(message.type),
     createdAt: message.createdAt,
+    sources: message.sources,
+    responseMode: message.responseMode,
+    responseStrategy: message.responseStrategy,
     ...(hintLevel ? { hintLevel } : {}),
     ...(message.hintNumber ? { hintNumber: message.hintNumber } : {}),
     ...(attachments?.length ? { attachments } : {}),
@@ -147,7 +151,7 @@ function toProgressStatus(status: string): SessionProgressStatus {
 }
 
 function getErrorMessage(error: unknown) {
-  if (error instanceof ApiError && error.message) {
+  if (error instanceof Error && error.message) {
     return error.message;
   }
 
@@ -156,6 +160,12 @@ function getErrorMessage(error: unknown) {
 
 export function useChatSession({ enabled = true }: UseChatSessionOptions = {}) {
   const isLoadingRef = useRef(false);
+  const processingController = useRef<AbortController | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    processingController.current = controller;
+    return () => controller.abort();
+  }, []);
   const [activeSession, setActiveSession] =
     useState<ChatSessionSummary>(DEFAULT_SESSION);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -163,6 +173,7 @@ export function useChatSession({ enabled = true }: UseChatSessionOptions = {}) {
   const [status, setStatus] = useState<SessionProgressStatus>("learning");
   const [isLoadingSession, setIsLoadingSession] = useState(enabled);
   const [isThinking, setIsThinking] = useState(false);
+  const [processingMessage, setProcessingMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isReady, setIsReady] = useState(false);
 
@@ -229,20 +240,33 @@ export function useChatSession({ enabled = true }: UseChatSessionOptions = {}) {
       const trimmedText = text.trim();
       const attachments = createAttachments(files);
 
-      if (!enabled || !activeSession.id) return;
-      if (!trimmedText && !attachments?.length) return;
-      if (status === "completed" || isThinking) return;
+      if (!enabled || !activeSession.id) return false;
+      if (!trimmedText && !attachments?.length) return false;
+      if (status === "completed" || isThinking) return false;
+      const signal = processingController.current?.signal;
 
       setIsThinking(true);
       setError(null);
 
       try {
+        // Persist attachments and wait for indexing before asking about them.
+        const attachedDocumentIds: number[] = [];
+        for (const file of files ?? []) {
+          signal?.throwIfAborted();
+          setProcessingMessage(`${file.name} 문서를 처리하고 있습니다.`);
+          if (file.size > 20 * 1024 * 1024) throw new Error("파일은 20MB 이하로 올려 주세요.");
+          const document = await waitForDocument(await uploadDocument(file), signal);
+          attachedDocumentIds.push(Number(document.id));
+        }
+        setProcessingMessage(null);
+        signal?.throwIfAborted();
         const turn = await sendChatMessage({
           conversationId: activeSession.id,
           message:
             trimmedText ||
             "첨부한 자료를 기준으로 어떤 부분이 막혔는지 설명해볼게요.",
           inputType: "text",
+          ...(attachedDocumentIds.length ? { documentIds: attachedDocumentIds } : {}),
         });
         const userMessage = toChatMessage(turn.userMessage, attachments);
         const assistantMessage = toChatMessage(turn.aiResponse);
@@ -263,9 +287,12 @@ export function useChatSession({ enabled = true }: UseChatSessionOptions = {}) {
         ) {
           setStatus("completed");
         }
+        return true;
       } catch (sendError) {
         setError(getErrorMessage(sendError));
+        return false;
       } finally {
+        setProcessingMessage(null);
         setIsThinking(false);
       }
     },
@@ -282,13 +309,15 @@ export function useChatSession({ enabled = true }: UseChatSessionOptions = {}) {
     try {
       const response = await requestChatHint(activeSession.id);
       const hintMessage = toChatMessage(response.hintMessage);
-      const hintRecord = toHintRecord(hintMessage, hintHistory.length + 1);
+      const isHint = hintMessage.type === "hint";
 
       setMessages((prev) => [...prev, hintMessage]);
-      setHintHistory((prev) => [...prev, hintRecord]);
+      if (isHint) {
+        setHintHistory((prev) => [...prev, toHintRecord(hintMessage, prev.length + 1)]);
+      }
       setActiveSession((prev) => ({
         ...prev,
-        hintCount: (prev.hintCount ?? 0) + 1,
+        hintCount: (prev.hintCount ?? 0) + (isHint ? 1 : 0),
         messageCount: (prev.messageCount ?? 0) + 1,
       }));
     } catch (hintError) {
@@ -296,7 +325,7 @@ export function useChatSession({ enabled = true }: UseChatSessionOptions = {}) {
     } finally {
       setIsThinking(false);
     }
-  }, [activeSession.id, enabled, hintHistory.length, isThinking, status]);
+  }, [activeSession.id, enabled, isThinking, status]);
 
   const completeSession = useCallback(async () => {
     if (!enabled || !activeSession.id) return;
@@ -354,6 +383,7 @@ export function useChatSession({ enabled = true }: UseChatSessionOptions = {}) {
     isReady,
     isThinking,
     messages,
+    processingMessage,
     refreshMessages,
     requestHint,
     retry: loadSession,
