@@ -22,7 +22,10 @@ export function reconcileRecordingCommand(
 export function shouldRefreshRecordingMessages(
   previous: DeviceCommandResponse | null,
   current: DeviceCommandResponse | null,
+  conversationId: string,
 ) {
-  return current?.status === "COMPLETED" &&
-    (previous?.id !== current.id || previous.status !== "COMPLETED");
+  if (!current || String(current.conversationId) !== conversationId) return false;
+  if (current.status === "CLAIMED") return true;
+  return (current.status === "COMPLETED" || current.status === "FAILED") &&
+    (previous?.id !== current.id || previous.status !== current.status);
 }

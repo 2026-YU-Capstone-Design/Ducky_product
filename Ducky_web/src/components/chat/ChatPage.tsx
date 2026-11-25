@@ -69,6 +69,7 @@ export function ChatPage() {
     isReady,
     isThinking,
     messages,
+    pendingMessage,
     processingMessage,
     refreshMessages,
     requestHint,
@@ -115,7 +116,7 @@ export function ChatPage() {
     isLoadingSession ||
     !isReady;
 
-  const applyRaspberryCommand = useCallback((incoming: DeviceCommandResponse | null) => {
+  const applyRaspberryCommand = useCallback(async (incoming: DeviceCommandResponse | null) => {
     const previous = lastRaspberryCommandRef.current?.deviceId === raspberryDeviceId
       ? lastRaspberryCommandRef.current : null;
     const command = reconcileRecordingCommand(previous, incoming);
@@ -126,10 +127,10 @@ export function ChatPage() {
     } else {
       setRaspberryError(null);
     }
-    if (shouldRefreshRecordingMessages(previous, command)) {
-      void refreshMessages();
+    if (shouldRefreshRecordingMessages(previous, command, activeSession.id)) {
+      await refreshMessages();
     }
-  }, [raspberryDeviceId, refreshMessages]);
+  }, [activeSession.id, raspberryDeviceId, refreshMessages]);
 
   const handleRaspberryTalk = useCallback(async () => {
     if (!raspberryDeviceId || !activeSession.id || isRaspberryButtonDisabled || startingRaspberryRef.current) {
@@ -141,7 +142,7 @@ export function ChatPage() {
     setIsStartingRaspberry(true);
 
     try {
-      applyRaspberryCommand(await startRaspberryRecording(raspberryDeviceId, activeSession.id));
+      await applyRaspberryCommand(await startRaspberryRecording(raspberryDeviceId, activeSession.id));
     } catch (startError) {
       setRaspberryError(getRaspberryErrorMessage(startError));
     } finally {
@@ -152,7 +153,7 @@ export function ChatPage() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages, isThinking]);
+  }, [messages, pendingMessage, isThinking]);
 
   useEffect(() => {
     if (!isReady) {
@@ -222,7 +223,7 @@ export function ChatPage() {
       polling = true;
       try {
         const command = await getLatestDeviceCommand(raspberryDeviceId);
-        if (!cancelled && !startingRaspberryRef.current) applyRaspberryCommand(command);
+        if (!cancelled && !startingRaspberryRef.current) await applyRaspberryCommand(command);
       } catch (pollError) {
         if (!cancelled) setRaspberryError(getRaspberryErrorMessage(pollError));
       } finally {
@@ -370,6 +371,7 @@ export function ChatPage() {
               {messages.map((message) => (
                 <ChatBubble key={message.id} message={message} />
               ))}
+              {pendingMessage && <ChatBubble message={pendingMessage} />}
 
               {isThinking && (
                 <div className="flex items-end gap-2">
