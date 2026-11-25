@@ -133,7 +133,10 @@ function getTopicProgress(sessions: Session[]): TopicProgress[] {
 
     current.totalSessions += 1;
     current.completedSessions += isCompleted ? 1 : 0;
-    if (new Date(session.updatedAt).getTime() > new Date(current.lastPracticedAt).getTime()) {
+    if (
+      new Date(session.updatedAt).getTime() >
+      new Date(current.lastPracticedAt).getTime()
+    ) {
       current.lastPracticedAt = session.updatedAt;
     }
   });
@@ -145,7 +148,9 @@ function getTopicProgress(sessions: Session[]): TopicProgress[] {
       progress:
         progress.totalSessions === 0
           ? 0
-          : Math.round((progress.completedSessions / progress.totalSessions) * 100),
+          : Math.round(
+              (progress.completedSessions / progress.totalSessions) * 100,
+            ),
     }))
     .sort(
       (a, b) =>
@@ -222,7 +227,10 @@ function getImprovementPoints(
   return points.slice(0, 3);
 }
 
-function buildAnalysis(user: User | null, sessions: Session[]): AnalysisSummary | null {
+function buildAnalysis(
+  user: User | null,
+  sessions: Session[],
+): AnalysisSummary | null {
   if (!user) {
     return null;
   }
@@ -312,9 +320,7 @@ function TopicProgressList({ topics }: { topics: TopicProgress[] }) {
     );
   }
 
-  const sorted = [...topics].sort(
-    (a, b) => b.progress - a.progress,
-  );
+  const sorted = [...topics].sort((a, b) => b.progress - a.progress);
   return (
     <div className="divide-y divide-[#f5e8cc] dark:divide-white/8">
       {sorted.map((topic) => (
@@ -456,9 +462,12 @@ export function AnalysisDashboard() {
         },
         {
           label: "이해 구조",
-          value: styleLabels.understanding[analysis.learningStyle.understanding],
+          value:
+            styleLabels.understanding[analysis.learningStyle.understanding],
           description:
-            styleDescriptions.understanding[analysis.learningStyle.understanding],
+            styleDescriptions.understanding[
+              analysis.learningStyle.understanding
+            ],
         },
       ]
     : [];
@@ -469,7 +478,7 @@ export function AnalysisDashboard() {
 
   return (
     <div className="flex min-h-full w-full flex-1 flex-col bg-[#FFFCF3] transition-colors dark:bg-[#16130A]">
-      <section className="mx-auto flex w-full max-w-7xl flex-1 flex-col px-5 py-8 sm:px-8 lg:px-10">
+      <section className="mx-auto flex w-full max-w-7xl flex-1 flex-col px-5 pt-8 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-8 lg:px-10 md:py-8">
         <div className="py-6 mb-2 ">
           <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-1 mb-3 text-[10px] font-bold tracking-[0.12em] text-amber-700 uppercase dark:bg-amber-900/40 dark:text-amber-300">
             <span className="size-1.5 rounded-full bg-amber-400 animate-pulse" />
@@ -517,9 +526,7 @@ export function AnalysisDashboard() {
         {analysis && (
           <>
             <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-[1.6fr_1fr_1fr]">
-              <div
-                className="relative overflow-hidden rounded-3xl border border-amber-200/50 p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-12px_rgba(217,119,6,0.12)] [background:linear-gradient(to_bottom_right,#fffbeb,#ffffff,#fefce8)] dark:border-white/8 dark:[background:#1E1B16] dark:shadow-none"
-              >
+              <div className="relative overflow-hidden rounded-3xl border border-amber-200/50 p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-12px_rgba(217,119,6,0.12)] [background:linear-gradient(to_bottom_right,#fffbeb,#ffffff,#fefce8)] dark:border-white/8 dark:[background:#1E1B16] dark:shadow-none">
                 <div className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full bg-amber-200/30 blur-3xl dark:hidden" />
                 <div className="pointer-events-none absolute -bottom-8 left-1/3 h-20 w-20 rounded-full bg-yellow-200/30 blur-2xl dark:hidden" />
                 <div className="relative">
@@ -535,8 +542,8 @@ export function AnalysisDashboard() {
                     </span>
                   </div>
                   <p className="mb-4 text-xs text-[#876c45] dark:text-gray-400">
-                    {analysis.completedSessions}/{analysis.totalSessions}개
-                    세션 완료
+                    {analysis.completedSessions}/{analysis.totalSessions}개 세션
+                    완료
                   </p>
                   <div className="h-[5px] overflow-hidden rounded-full bg-[#f5e8cc] dark:bg-white/10">
                     <div
@@ -599,8 +606,7 @@ export function AnalysisDashboard() {
                     주제별 진행률
                   </h2>
                   <span className="rounded-full border border-amber-300/60 bg-[#fffbeb] px-2.5 py-0.5 text-[11px] font-bold text-amber-700 dark:border-amber-800/30 dark:bg-amber-900/20 dark:text-amber-300">
-                    {analysis.completedSessions}/{analysis.totalSessions}{" "}
-                    완료
+                    {analysis.completedSessions}/{analysis.totalSessions} 완료
                   </span>
                 </div>
                 <div className="p-4">
@@ -620,7 +626,8 @@ export function AnalysisDashboard() {
                 </div>
                 <div className="flex flex-1 flex-col items-center justify-center px-5 py-6 text-center">
                   <p className="text-[18px] font-extrabold leading-[1.45] tracking-[-0.2px] text-amber-900 break-keep dark:text-white">
-                    {analysis.improvementPoints[0]?.title ?? "다음 학습 세션 시작하기"}
+                    {analysis.improvementPoints[0]?.title ??
+                      "다음 학습 세션 시작하기"}
                   </p>
                   <div className="my-4 h-px w-full bg-[#ede0c4] dark:bg-white/8" />
                   <p className="text-xs leading-relaxed text-[#806437] break-keep dark:text-gray-400">
@@ -636,7 +643,9 @@ export function AnalysisDashboard() {
                   <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-100 bg-white px-4 py-2 dark:border-white/10 dark:bg-[#1A1714]">
                     <h2 className="text-xs font-bold">다음 학습 포인트</h2>
                     <TabsList variant="line">
-                      <TabsTrigger value="improvements">개선 포인트</TabsTrigger>
+                      <TabsTrigger value="improvements">
+                        개선 포인트
+                      </TabsTrigger>
                       <TabsTrigger value="topics">주제 상세</TabsTrigger>
                     </TabsList>
                   </div>

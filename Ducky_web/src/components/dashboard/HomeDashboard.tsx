@@ -151,7 +151,7 @@ export function HomeDashboard() {
 
   return (
     <div className="flex min-h-full w-full flex-1 flex-col bg-[#FFFCF3] transition-colors dark:bg-[#16130A]">
-      <section className="mx-auto flex w-full max-w-7xl flex-1 flex-col px-5 py-10 sm:px-8 lg:px-10">
+      <section className="mx-auto flex w-full max-w-7xl flex-1 flex-col px-5 pt-10 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-8 lg:px-10 md:py-10">
         <div className="relative overflow-hidden rounded-3xl border border-amber-100/80 bg-gradient-to-br from-amber-50 via-white to-yellow-50 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-12px_rgba(217,119,6,0.15)] dark:border-amber-900/30 dark:from-[#1E1B16] dark:via-[#1A1714] dark:to-[#1E1B10] dark:shadow-none">
           <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-amber-200/40 blur-3xl dark:bg-amber-600/10" />
           <div className="pointer-events-none absolute -bottom-10 left-1/4 h-40 w-40 rounded-full bg-yellow-200/40 blur-2xl dark:bg-yellow-700/10" />
@@ -176,8 +176,8 @@ export function HomeDashboard() {
                   해볼까요?
                 </h1>
                 <p className="mt-3 max-w-sm text-sm leading-relaxed text-gray-500 break-keep dark:text-gray-400">
-                  궁금한 내용은 바로 물어보세요. 힌트가 필요하면 생각을
-                  정리할 수 있는 질문으로 도와드립니다.
+                  궁금한 내용은 바로 물어보세요. 힌트가 필요하면 생각을 정리할
+                  수 있는 질문으로 도와드립니다.
                 </p>
               </div>
 
@@ -335,7 +335,9 @@ export function HomeDashboard() {
 
             {activeSession && (
               <Link
-                href={activeSession.status === "in_progress" ? "/chat" : "/sessions"}
+                href={
+                  activeSession.status === "in_progress" ? "/chat" : "/sessions"
+                }
                 className="group relative flex flex-col gap-3 overflow-hidden rounded-2xl border border-amber-200/80 bg-gradient-to-br from-amber-50 to-yellow-50/60 p-5 shadow-[0_1px_2px_rgba(0,0,0,0.03)] transition-all duration-200 hover:-translate-y-0.5 hover:border-amber-400 hover:shadow-[0_8px_24px_-8px_rgba(217,119,6,0.3)] active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400 dark:border-amber-800/40 dark:from-amber-900/20 dark:to-yellow-900/10"
               >
                 <div
@@ -346,7 +348,9 @@ export function HomeDashboard() {
                 <div className="relative flex items-center justify-between">
                   <span className="inline-flex items-center gap-1.5 text-xs font-bold tracking-wide text-amber-600 dark:text-amber-400">
                     <PlayCircle className="size-3.5" aria-hidden="true" />
-                    {activeSession.status === "in_progress" ? "이어서 대화" : "학습 기록 보기"}
+                    {activeSession.status === "in_progress"
+                      ? "이어서 대화"
+                      : "학습 기록 보기"}
                   </span>
                   <ChevronRight
                     className="size-4 text-amber-400 transition-transform duration-200 group-hover:translate-x-0.5"
@@ -362,7 +366,6 @@ export function HomeDashboard() {
                     {activeSession.summary}
                   </p>
                 </div>
-
 
                 <div className="relative flex items-center gap-2 text-xs text-gray-400">
                   <span
