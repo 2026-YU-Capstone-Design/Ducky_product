@@ -47,7 +47,9 @@ function formatFileSize(size: number) {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function createAttachments(files: File[] | undefined): ChatAttachment[] | undefined {
+function createAttachments(
+  files: File[] | undefined,
+): ChatAttachment[] | undefined {
   if (!files?.length) return undefined;
 
   return files.map((file) => ({
@@ -126,7 +128,10 @@ function toSessionSummary(
   };
 }
 
-function toHintRecord(message: ChatMessage, fallbackNumber: number): HintRecord {
+function toHintRecord(
+  message: ChatMessage,
+  fallbackNumber: number,
+): HintRecord {
   const number = message.hintNumber ?? fallbackNumber;
   const depth =
     message.hintLevel ?? toHintLevel(Math.min(Math.ceil(number / 2), 3)) ?? 3;
@@ -173,7 +178,9 @@ export function useChatSession({ enabled = true }: UseChatSessionOptions = {}) {
   const [status, setStatus] = useState<SessionProgressStatus>("learning");
   const [isLoadingSession, setIsLoadingSession] = useState(enabled);
   const [isThinking, setIsThinking] = useState(false);
-  const [processingMessage, setProcessingMessage] = useState<string | null>(null);
+  const [processingMessage, setProcessingMessage] = useState<string | null>(
+    null,
+  );
   const [error, setError] = useState<string | null>(null);
   const [isReady, setIsReady] = useState(false);
 
@@ -245,38 +252,75 @@ export function useChatSession({ enabled = true }: UseChatSessionOptions = {}) {
       if (status === "completed" || isThinking) return false;
       const signal = processingController.current?.signal;
 
+      const optimisticId = createClientId("message");
+
+      const optimisticMessage: ChatMessage = {
+        id: optimisticId,
+        role: "user",
+        content:
+          trimmedText ||
+          "첨부한 자료를 기준으로 어떤 부분이 막혔는지 설명해볼게요.",
+        type: "question",
+        createdAt: new Date().toISOString(),
+        ...(attachments?.length ? { attachments } : {}),
+      };
+
+      setMessages((prev) => [...prev, optimisticMessage]);
+
       setIsThinking(true);
       setError(null);
 
       try {
+        signal?.throwIfAborted();
+
         // Persist attachments and wait for indexing before asking about them.
         const attachedDocumentIds: number[] = [];
+
         for (const file of files ?? []) {
           signal?.throwIfAborted();
           setProcessingMessage(`${file.name} 문서를 처리하고 있습니다.`);
-          if (file.size > 20 * 1024 * 1024) throw new Error("파일은 20MB 이하로 올려 주세요.");
-          const document = await waitForDocument(await uploadDocument(file), signal);
+
+          if (file.size > 20 * 1024 * 1024)
+            throw new Error("파일은 20MB 이하로 올려 주세요.");
+
+          const document = await waitForDocument(
+            await uploadDocument(file),
+            signal,
+          );
+
           attachedDocumentIds.push(Number(document.id));
         }
+
         setProcessingMessage(null);
         signal?.throwIfAborted();
+
         const turn = await sendChatMessage({
           conversationId: activeSession.id,
           message:
             trimmedText ||
             "첨부한 자료를 기준으로 어떤 부분이 막혔는지 설명해볼게요.",
           inputType: "text",
-          ...(attachedDocumentIds.length ? { documentIds: attachedDocumentIds } : {}),
+          ...(attachedDocumentIds.length
+            ? { documentIds: attachedDocumentIds }
+            : {}),
         });
+
         const userMessage = toChatMessage(turn.userMessage, attachments);
         const assistantMessage = toChatMessage(turn.aiResponse);
 
-        setMessages((prev) => [...prev, userMessage, assistantMessage]);
+        setMessages((prev) => [
+          ...prev.map((message) =>
+            message.id === optimisticId ? userMessage : message,
+          ),
+          assistantMessage,
+        ]);
+
         setActiveSession((prev) => ({
           ...prev,
           messageCount: (prev.messageCount ?? 0) + 2,
           status:
-            userMessage.type === "answer" || assistantMessage.type === "feedback"
+            userMessage.type === "answer" ||
+            assistantMessage.type === "feedback"
               ? "completed"
               : prev.status,
         }));
@@ -287,8 +331,13 @@ export function useChatSession({ enabled = true }: UseChatSessionOptions = {}) {
         ) {
           setStatus("completed");
         }
+
         return true;
       } catch (sendError) {
+        setMessages((prev) =>
+          prev.filter((message) => message.id !== optimisticId),
+        );
+
         setError(getErrorMessage(sendError));
         return false;
       } finally {
@@ -313,7 +362,10 @@ export function useChatSession({ enabled = true }: UseChatSessionOptions = {}) {
 
       setMessages((prev) => [...prev, hintMessage]);
       if (isHint) {
-        setHintHistory((prev) => [...prev, toHintRecord(hintMessage, prev.length + 1)]);
+        setHintHistory((prev) => [
+          ...prev,
+          toHintRecord(hintMessage, prev.length + 1),
+        ]);
       }
       setActiveSession((prev) => ({
         ...prev,
@@ -360,7 +412,9 @@ export function useChatSession({ enabled = true }: UseChatSessionOptions = {}) {
 
     try {
       const detail = await getConversation(activeSession.id);
-      const nextMessages = detail.messages.map((message) => toChatMessage(message));
+      const nextMessages = detail.messages.map((message) =>
+        toChatMessage(message),
+      );
 
       setMessages(nextMessages);
       setHintHistory(buildHintHistory(nextMessages));
