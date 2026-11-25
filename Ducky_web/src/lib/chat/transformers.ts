@@ -66,6 +66,23 @@ export function toChatMessage(message: BackendChatMessage): ChatMessage {
   };
 }
 
+export function mergeChatMessages(current: ChatMessage[], incoming: ChatMessage[]): ChatMessage[] {
+  const byId = new Map(current.map((message) => [message.id, message]));
+  let changed = false;
+  for (const message of incoming) {
+    const known = byId.get(message.id);
+    if (!known || (message.attachments && !known.attachments)) {
+      byId.set(message.id, message);
+      changed = true;
+    }
+  }
+  if (!changed) return current;
+
+  // Server IDs are generated as messages are inserted. A delayed response can
+  // deliver an older message after a more recent conversation poll.
+  return Array.from(byId.values()).sort((a, b) => BigInt(a.id) < BigInt(b.id) ? -1 : 1);
+}
+
 export function toChatSessionSummary(
   conversation: BackendConversationSummary,
 ): ChatSessionSummary {
