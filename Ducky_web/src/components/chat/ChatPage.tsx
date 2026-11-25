@@ -24,6 +24,7 @@ import {
   type DeviceResponse,
 } from "@/lib/api/devices";
 import {
+  getRecordingRetryNotice,
   isRecordingCommandActive,
   reconcileRecordingCommand,
   shouldRefreshRecordingMessages,
@@ -51,6 +52,7 @@ export function ChatPage() {
   const [raspberryDeviceId, setRaspberryDeviceId] = useState<string | null>(null);
   const [raspberryDeviceStatus, setRaspberryDeviceStatus] = useState<string | null>(null);
   const [raspberryError, setRaspberryError] = useState<string | null>(null);
+  const [raspberryNotice, setRaspberryNotice] = useState<string | null>(null);
   const [isRaspberryCommandPending, setIsRaspberryCommandPending] = useState(false);
   const [isStartingRaspberry, setIsStartingRaspberry] = useState(false);
   const lastRaspberryCommandRef = useRef<DeviceCommandResponse | null>(null);
@@ -122,7 +124,9 @@ export function ChatPage() {
     const command = reconcileRecordingCommand(previous, incoming);
     lastRaspberryCommandRef.current = command;
     setIsRaspberryCommandPending(isRecordingCommandActive(command));
-    if (command?.status === "FAILED") {
+    const notice = getRecordingRetryNotice(command, activeSession.id);
+    setRaspberryNotice(notice);
+    if (command?.status === "FAILED" && String(command.conversationId) === activeSession.id && !notice) {
       setRaspberryError(command.errorMessage ?? "라즈베리 녹음 명령을 처리하지 못했습니다.");
     } else {
       setRaspberryError(null);
@@ -138,6 +142,7 @@ export function ChatPage() {
     }
 
     setRaspberryError(null);
+    setRaspberryNotice(null);
     startingRaspberryRef.current = true;
     setIsStartingRaspberry(true);
 
@@ -400,6 +405,14 @@ export function ChatPage() {
               <div ref={bottomRef} />
             </div>
           </ScrollArea>
+
+          <div role="status" className="shrink-0">
+            {raspberryNotice && (
+              <p className="mx-3 mb-2 rounded-lg border border-[#F0E0A8] bg-[#FFF6DC] px-4 py-2 text-sm text-[#5C4413] sm:mx-5 lg:mx-8 dark:border-[#5C4413]/40 dark:bg-[#2A2310] dark:text-[#E8C97A]">
+                {raspberryNotice}
+              </p>
+            )}
+          </div>
 
           <ChatInput
             disabled={isThinking || isCompleted || isLoadingSession || !isReady}
