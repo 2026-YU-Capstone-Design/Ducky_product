@@ -77,7 +77,7 @@ npm run test:local
 
 | 팀원 | 역할 |
 | --- | --- |
-| [Kim Jeong Un](https://github.com/vni911) | PM |
+| [정운](https://github.com/vni911) | PM |
 | [혜진](https://github.com/hyeji-neee) | 프론트엔드 |
 | 은진 | 백엔드 |
 | 문경 | 백엔드 · IoT |
