@@ -79,6 +79,6 @@ npm run test:local
 | --- | --- |
 | [정운](https://github.com/vni911) | PM |
 | [혜진](https://github.com/hyeji-neee) | 프론트엔드 |
-| 은진 | 백엔드 |
-| 문경 | 백엔드 · IoT |
+| [은진](https://github.com/yim-eun-jin) | 백엔드 |
+| [문경](https://github.com/mujang3) | 백엔드 · IoT |
 | 제환 | AI |
