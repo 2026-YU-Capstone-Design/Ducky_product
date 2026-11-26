@@ -4,6 +4,7 @@
   <p><strong>말로 풀어가는 러버덕 디버깅과 학습</strong></p>
   <p>
     <a href="https://ducklab.site">웹 서비스</a> ·
+    <a href="#시스템-아키텍처">시스템 아키텍처</a> ·
     <a href="#빠른-시작">빠른 시작</a> ·
     <a href="#저장소-구성">모듈 가이드</a>
   </p>
@@ -18,17 +19,13 @@
 | **음성으로 대화** | 브라우저 마이크로 입력하거나, 등록한 Raspberry Pi의 마이크와 스피커로 대화할 수 있습니다. |
 | **학습 이어가기** | 학습 유형을 설정하고 세션 기록에서 이전 대화를 다시 열 수 있습니다. |
 
-## 서비스 구성
+## 시스템 아키텍처
 
-```mermaid
-flowchart LR
-    Web["Web · Next.js"] <-->|"채팅 · 문서 · 기기 제어"| WAS["WAS · Spring Boot"]
-    Pi["Raspberry Pi"] <-->|"음성 대화 · 기기 상태"| WAS
-    WAS -->|"문서 변환 요청"| RAG["RAG · Python"]
-    WAS -->|"계정 · 대화 · 문서 색인"| DB[("H2 / PostgreSQL")]
-```
+![Ducky 시스템 아키텍처. AWS 웹 서비스, S3·SQS·Lambda 문서 처리, Raspberry Pi·Arduino 연동, GitHub Actions 배포 흐름](docs/ducky-architecture.png)
 
-로컬에서는 Spring이 Python HTTP 처리기를 호출합니다. AWS 문서 모드에서는 S3와 SQS를 통해 Lambda가 원본을 처리하고, Spring이 완료 메시지를 검증해 색인합니다. 검색과 답변 정책은 Spring이 담당합니다. 자세한 흐름은 [RAG](Ducky_rag/README.md)와 [대화 하네스](Ducky_was/docs/CONVERSATION_HARNESS.md)에서 볼 수 있습니다.
+AWS 문서 모드에서는 S3와 SQS를 통해 Lambda가 원본을 처리하고, Spring이 완료 메시지를 검증해 색인합니다. `Ducky_edge`는 Raspberry Pi에서 로컬 음성 인식·합성·모델 추론을 실행하는 엣지 구현입니다.
+
+로컬 개발에서는 Spring이 Python HTTP 처리기를 호출합니다. 검색과 답변 정책은 Spring이 담당합니다. 자세한 흐름은 [RAG](Ducky_rag/README.md)와 [대화 하네스](Ducky_was/docs/CONVERSATION_HARNESS.md)에서 볼 수 있습니다.
 
 ## 빠른 시작
 
@@ -75,3 +72,13 @@ npm run test:local
 | [Ducky_AI_temporary](Ducky_AI_temporary/README.md) | Raspberry Pi · Arduino Nano | 음성 대화 클라이언트, 물리 버튼과 상태 LED |
 
 [개발·운영 인계 문서](docs/DUCKY_1123_HANDOFF.md) · [통합 CI](.github/workflows/ci.yml) · [이미지 발행 워크플로](.github/workflows/publish.yml)
+
+## 팀원과 역할
+
+| 팀원 | 역할 |
+| --- | --- |
+| [Kim Jeong Un](https://github.com/vni911) | PM |
+| [혜진](https://github.com/hyeji-neee) | 프론트엔드 |
+| 은진 | 백엔드 |
+| 문경 | 백엔드 · IoT |
+| 제환 | AI |
