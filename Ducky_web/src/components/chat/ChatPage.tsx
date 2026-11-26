@@ -46,7 +46,7 @@ function getRaspberryErrorMessage(error: unknown) {
   return "라즈베리 명령을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.";
 }
 
-export function ChatPage() {
+export function ChatPage({ conversationId }: { conversationId?: string }) {
   const [draft, setDraft] = useState("");
   const [isHintOpen, setIsHintOpen] = useState(false);
   const [raspberryDeviceId, setRaspberryDeviceId] = useState<string | null>(null);
@@ -59,7 +59,7 @@ export function ChatPage() {
   const startingRaspberryRef = useRef(false);
   const previousRaspberryStatusRef = useRef<string | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
-  const chat = useChatSession();
+  const chat = useChatSession({ conversationId });
   const {
     activeSession,
     completeSession,
@@ -293,8 +293,8 @@ export function ChatPage() {
                 >
                   Ducky
                 </h1>
-                <p className="truncate text-xs text-gray-500 dark:text-gray-400">
-                  {activeSession.topic} 질문 훈련
+                <p className="truncate text-xs text-gray-500 dark:text-gray-400" title={activeSession.title}>
+                  {activeSession.title}
                 </p>
               </div>
             </div>

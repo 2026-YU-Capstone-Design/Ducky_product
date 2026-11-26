@@ -74,6 +74,35 @@ afterEach(() => {
   delete global.window;
 });
 
+test('resuming a conversation loads the selected history and sends to the same session', async () => {
+  login();
+  const requests = [];
+  const detail = { id: '25', messages: [{ content: 'previous question' }] };
+  global.fetch = async (url, options) => {
+    requests.push([new URL(url).pathname, options.method, options.body]);
+    return response(options.method === 'GET' ? detail : { conversationId: '25' });
+  };
+  const selected = await chat.loadChatConversation('25');
+  assert.deepEqual(selected, detail);
+  await chat.sendChatMessage({ conversationId: selected.id, message: 'follow-up' });
+  assert.deepEqual(requests, [
+    ['/api/chat/conversations/25', 'GET', undefined],
+    ['/api/chat/messages', 'POST', JSON.stringify({ conversationId: 25, message: 'follow-up', inputType: 'text' })],
+  ]);
+});
+
+test('an unavailable or malformed session does not open or create a different conversation', async () => {
+  login();
+  const paths = [];
+  global.fetch = async (url) => {
+    paths.push(new URL(url).pathname);
+    return Response.json({ message: 'Session unavailable' }, { status: 404 });
+  };
+  await assert.rejects(chat.loadChatConversation('26'), { status: 404 });
+  await assert.rejects(chat.loadChatConversation('../invalid'), /잘못된 세션 주소/);
+  assert.deepEqual(paths, ['/api/chat/conversations/26']);
+});
+
 test('recording receipts recover after timeout and ignore delayed older responses', () => {
   const pending = { id: '21', status: 'PENDING', errorMessage: null };
   const claimed = { ...pending, status: 'CLAIMED' };
