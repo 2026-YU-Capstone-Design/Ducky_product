@@ -4,6 +4,8 @@
 
 웹과 Raspberry Pi가 사용하는 API 서버입니다. 사용자 인증과 학습 유형, 세션과 메시지, 문서 검색과 기기 명령을 관리합니다.
 
+> 채팅과 자료실 화면은 **[Ducky 웹 서비스 열기](https://ducklab.site/)**에서 확인할 수 있습니다.
+
 [제품 소개](../README.md) · [웹](../Ducky_web/README.md) · [문서 처리기](../Ducky_rag/README.md)
 
 ## 로컬 개발
