@@ -40,6 +40,9 @@ const comfortaa = Comfortaa({
 });
 
 function getRaspberryErrorMessage(error: unknown) {
+  if (error instanceof Error && error.name === "TimeoutError") {
+    return "덕키 응답을 기다리는 시간이 초과됐어요. 잠시 후 다시 시도해 주세요.";
+  }
   if (error instanceof Error && error.message) {
     return error.message;
   }
@@ -105,7 +108,7 @@ export function ChatPage({ conversationId }: { conversationId?: string }) {
             raspberryDeviceStatus === "SPEAKING" ||
             raspberryDeviceStatus === "LOGGING"
           ? "응답 중"
-          : "대기 중";
+          : "녹음 요청 중";
   const raspberryButtonLabel = !raspberryDeviceId
     ? "라즈베리 없음"
     : isRaspberryBusy
@@ -258,6 +261,24 @@ export function ChatPage({ conversationId }: { conversationId?: string }) {
 
     previousRaspberryStatusRef.current = raspberryDeviceStatus;
   }, [raspberryDeviceStatus, refreshMessages]);
+
+  useEffect(() => {
+    if (!isReady || !raspberryDeviceId || isCompleted || isRaspberryCommandPending) return;
+
+    let refreshing = false;
+    const refreshDeviceConversation = async () => {
+      if (refreshing || document.visibilityState !== "visible") return;
+      refreshing = true;
+      try {
+        await refreshMessages({ silent: true });
+      } finally {
+        refreshing = false;
+      }
+    };
+
+    const timer = window.setInterval(() => void refreshDeviceConversation(), 5000);
+    return () => window.clearInterval(timer);
+  }, [isReady, isCompleted, isRaspberryCommandPending, raspberryDeviceId, refreshMessages]);
 
   const hintPanel = (
     <HintPanel
