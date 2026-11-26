@@ -16,6 +16,7 @@ import {
   PlayCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { NewConversationButton } from "@/components/chat/NewConversationButton";
 import { useDashboardData } from "@/hooks/useDashboardData";
 import type { LearningLevel, LearningStyle } from "@/types/user";
 import type { Session } from "@/types/session";
@@ -181,18 +182,7 @@ export function HomeDashboard() {
                 </p>
               </div>
 
-              <div className="flex flex-wrap items-center gap-3">
-                <Link
-                  href="/chat"
-                  className="group inline-flex min-h-11 items-center gap-2 rounded-xl bg-gradient-to-b from-amber-400 to-amber-500 px-5 text-sm font-bold text-gray-900 shadow-[0_1px_2px_rgba(0,0,0,0.06),0_4px_14px_-4px_rgba(217,119,6,0.45)] transition-all duration-200 hover:shadow-[0_1px_2px_rgba(0,0,0,0.06),0_6px_18px_-4px_rgba(217,119,6,0.55)] hover:brightness-[1.03] active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400"
-                >
-                  새 대화 시작
-                  <ArrowRight
-                    className="size-4 transition-transform duration-200 group-hover:translate-x-0.5"
-                    aria-hidden="true"
-                  />
-                </Link>
-              </div>
+              <NewConversationButton />
             </div>
 
             <div className="relative grid grid-cols-2 border-t border-amber-200/70 bg-amber-100/50 sm:grid-cols-4 dark:border-amber-900/40 dark:bg-black/10">

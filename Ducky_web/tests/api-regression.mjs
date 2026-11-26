@@ -91,6 +91,33 @@ test('resuming a conversation loads the selected history and sends to the same s
   ]);
 });
 
+test('starting a new conversation creates an empty session while the previous history is still addressable', async () => {
+  login();
+  const existing = { id: '25', messages: [{ content: 'previous question' }] };
+  const created = { id: '26', messages: [] };
+  const { signal } = new AbortController();
+  const requests = [];
+  global.fetch = async (url, options) => {
+    const path = new URL(url).pathname;
+    requests.push([options.method, path]);
+    if (options.method === 'POST') {
+      assert.deepEqual(JSON.parse(options.body), { title: '새 대화', topic: '러버덕 질문 훈련' });
+      assert.equal(options.signal, signal);
+      return response({ id: created.id });
+    }
+    return response(path.endsWith('/26') ? created : existing);
+  };
+
+  const { id } = await chat.startConversation({ title: '새 대화', topic: '러버덕 질문 훈련' }, signal);
+  assert.deepEqual(await chat.loadChatConversation(id), created);
+  assert.deepEqual(await chat.loadChatConversation(existing.id), existing);
+  assert.deepEqual(requests, [
+    ['POST', '/api/chat/conversations'],
+    ['GET', '/api/chat/conversations/26'],
+    ['GET', '/api/chat/conversations/25'],
+  ]);
+});
+
 test('an unavailable or malformed session does not open or create a different conversation', async () => {
   login();
   const paths = [];
