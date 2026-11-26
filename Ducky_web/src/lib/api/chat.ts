@@ -67,12 +67,13 @@ export function listConversations() {
   });
 }
 
-export function getConversation(conversationId: string) {
+export function getConversation(conversationId: string, signal?: AbortSignal) {
   return apiRequest<BackendConversationDetail>(
     `/api/chat/conversations/${conversationId}`,
     {
       method: "GET",
       auth: true,
+      signal,
     },
   );
 }

@@ -256,13 +256,25 @@ class AuthDeviceFlowTest extends ApiFlowTest {
                 .andExpect(status().isOk())
                 .andReturn();
         Long conversationId = readData(conversationResult).get("id").asLong();
+        mockMvc.perform(post("/api/devices/{id}/commands/start-recording", deviceId)
+                        .header("Authorization", "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("conversationId", conversationId))))
+                .andExpect(status().isOk());
+        MvcResult newerConversation = mockMvc.perform(post("/api/chat/conversations")
+                        .header("Authorization", "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("title", "New web session"))))
+                .andExpect(status().isOk())
+                .andReturn();
+        long newerConversationId = readData(newerConversation).get("id").asLong();
 
         mockMvc.perform(get("/api/duck/active-conversation")
                         .header("Authorization", pi.authorization())
                         .param("deviceId", deviceSerial)
                         .param("userId", userId))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.conversationId").value(conversationId));
+                .andExpect(jsonPath("$.conversationId").value(newerConversationId));
     }
 
     @Test

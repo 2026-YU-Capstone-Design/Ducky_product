@@ -40,6 +40,7 @@ export function startRaspberryRecording(
     {
       method: "POST",
       auth: true,
+      signal: AbortSignal.timeout(12000),
       body: {
         conversationId: Number(conversationId),
       },
@@ -53,6 +54,7 @@ export function getLatestDeviceCommand(deviceId: string) {
     {
       method: "GET",
       auth: true,
+      signal: AbortSignal.timeout(8000),
     },
   );
 }

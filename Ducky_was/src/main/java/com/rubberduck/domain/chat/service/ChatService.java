@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -129,8 +130,8 @@ public class ChatService {
     @Transactional(readOnly = true)
     public Optional<Long> findActiveConversationId(DeviceUser link) {
         User user = link.getUser();
-        return conversationRepository.findFirstByUserAndDeviceAndStatusOrderByUpdatedAtDesc(user, link.getDevice(), "in_progress")
-                .or(() -> conversationRepository.findFirstByUserAndDeviceAndStatusOrderByUpdatedAtDesc(user, null, "in_progress"))
+        return conversationRepository.findLatestAssignable(user, link.getDevice(), "in_progress", Limit.of(1))
+                .stream().findFirst()
                 .map(ConversationRepository.ConversationId::getId);
     }
 

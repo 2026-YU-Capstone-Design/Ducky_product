@@ -364,14 +364,14 @@ export function useChatSession({ conversationId, enabled = true }: UseChatSessio
     }
   }, [activeSession.id, enabled, isThinking, status]);
 
-  const refreshMessages = useCallback(async () => {
+  const refreshMessages = useCallback(async (options?: { silent?: boolean }) => {
     if (!enabled || !activeSession.id || !getAccessToken()) {
       return;
     }
 
     const currentRefresh = ++refreshVersion.current;
     try {
-      const detail = await getConversation(activeSession.id);
+      const detail = await getConversation(activeSession.id, AbortSignal.timeout(8000));
       if (currentRefresh !== refreshVersion.current) return;
       const nextMessages = detail.messages.map((message) =>
         toChatMessage(message),
@@ -385,7 +385,9 @@ export function useChatSession({ conversationId, enabled = true }: UseChatSessio
       });
       if (detail.status === "completed") setStatus("completed");
     } catch (refreshError) {
-      if (currentRefresh === refreshVersion.current) setError(getErrorMessage(refreshError));
+      if (!options?.silent && currentRefresh === refreshVersion.current) {
+        setError(getErrorMessage(refreshError));
+      }
     }
   }, [activeSession.id, enabled]);
 
