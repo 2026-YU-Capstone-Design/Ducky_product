@@ -18,6 +18,22 @@ class ChatResponseServicePromptTest {
     private final ChatResponseService chatResponseService = new ChatResponseService("", "test-model", 1);
 
     @Test
+    void debugReportStartsWithOneQuestionWithoutCallingTheModel() {
+        var reply = chatResponseService.generateTurn("리스트를 반복하다가 IndexError가 나.", null, "", List.of());
+        assertThat(reply.type()).isEqualTo("question");
+        assertThat(reply.responseMode()).isEqualTo("rule");
+        assertThat(reply.content()).isEqualTo("오류가 난 순간에 인덱스 값은 얼마였나요?");
+
+        var assistant = ChatMessage.create(null, "assistant", reply.content(), "question", "system", 1);
+        assistant.setResponseStrategy("DEBUG");
+        var followUp = chatResponseService.generateTurn("인덱스 값은 3이야", null, "", List.of(assistant));
+        assertThat(followUp.type()).isEqualTo("question");
+        assertThat(followUp.content()).isEqualTo("그 값이 정해지기 직전에 어떤 조건을 확인했나요?");
+        assertThat(chatResponseService.buildTurnPrompt("인덱스 값은 3이야", null, "", List.of(assistant), null))
+                .contains("질문 한 문장만", "이미 답한 내용을 다시 묻지 않는다", reply.content());
+    }
+
+    @Test
     void groundedAnswerKeepsOnlySourcesTheModelSelected() {
         var candidates = List.of(
                 new DocumentSearchResult("4", "5", "Guide", "Intro", 0.4, "first", "Introduction", 1, List.of("first")),

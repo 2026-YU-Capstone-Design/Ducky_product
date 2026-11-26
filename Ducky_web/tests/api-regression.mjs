@@ -74,6 +74,62 @@ afterEach(() => {
   delete global.window;
 });
 
+test('resuming a conversation loads the selected history and sends to the same session', async () => {
+  login();
+  const requests = [];
+  const detail = { id: '25', messages: [{ content: 'previous question' }] };
+  global.fetch = async (url, options) => {
+    requests.push([new URL(url).pathname, options.method, options.body]);
+    return response(options.method === 'GET' ? detail : { conversationId: '25' });
+  };
+  const selected = await chat.loadChatConversation('25');
+  assert.deepEqual(selected, detail);
+  await chat.sendChatMessage({ conversationId: selected.id, message: 'follow-up' });
+  assert.deepEqual(requests, [
+    ['/api/chat/conversations/25', 'GET', undefined],
+    ['/api/chat/messages', 'POST', JSON.stringify({ conversationId: 25, message: 'follow-up', inputType: 'text' })],
+  ]);
+});
+
+test('starting a new conversation creates an empty session while the previous history is still addressable', async () => {
+  login();
+  const existing = { id: '25', messages: [{ content: 'previous question' }] };
+  const created = { id: '26', messages: [] };
+  const { signal } = new AbortController();
+  const requests = [];
+  global.fetch = async (url, options) => {
+    const path = new URL(url).pathname;
+    requests.push([options.method, path]);
+    if (options.method === 'POST') {
+      assert.deepEqual(JSON.parse(options.body), { title: '새 대화', topic: '러버덕 질문 훈련' });
+      assert.equal(options.signal, signal);
+      return response({ id: created.id });
+    }
+    return response(path.endsWith('/26') ? created : existing);
+  };
+
+  const { id } = await chat.startConversation({ title: '새 대화', topic: '러버덕 질문 훈련' }, signal);
+  assert.deepEqual(await chat.loadChatConversation(id), created);
+  assert.deepEqual(await chat.loadChatConversation(existing.id), existing);
+  assert.deepEqual(requests, [
+    ['POST', '/api/chat/conversations'],
+    ['GET', '/api/chat/conversations/26'],
+    ['GET', '/api/chat/conversations/25'],
+  ]);
+});
+
+test('an unavailable or malformed session does not open or create a different conversation', async () => {
+  login();
+  const paths = [];
+  global.fetch = async (url) => {
+    paths.push(new URL(url).pathname);
+    return Response.json({ message: 'Session unavailable' }, { status: 404 });
+  };
+  await assert.rejects(chat.loadChatConversation('26'), { status: 404 });
+  await assert.rejects(chat.loadChatConversation('../invalid'), /잘못된 세션 주소/);
+  assert.deepEqual(paths, ['/api/chat/conversations/26']);
+});
+
 test('recording receipts recover after timeout and ignore delayed older responses', () => {
   const pending = { id: '21', status: 'PENDING', errorMessage: null };
   const claimed = { ...pending, status: 'CLAIMED' };
@@ -103,6 +159,14 @@ test('polls the claimed recording until the transcript arrives and refreshes aga
   assert.equal(recording.shouldRefreshRecordingMessages(claimed, failed, '1'), true);
   assert.equal(recording.shouldRefreshRecordingMessages(failed, failed, '1'), false);
   assert.equal(recording.shouldRefreshRecordingMessages(second, recording.reconcileRecordingCommand(second, first), '1'), false);
+});
+
+test('a silent Pi recording gives a retry notice in its chat without relabeling timeouts', () => {
+  const failed = { status: 'FAILED', conversationId: 1, errorMessage: 'Native voice turn did not complete' };
+  assert.equal(recording.getRecordingRetryNotice(failed, '1'), '음성을 확인하지 못했어요. 다시 말해 주세요.');
+  assert.equal(recording.getRecordingRetryNotice(failed, '2'), null);
+  assert.equal(recording.getRecordingRetryNotice({ ...failed, errorMessage: 'timed out' }, '1'), null);
+  assert.equal(recording.getRecordingRetryNotice({ ...failed, status: 'COMPLETED' }, '1'), null);
 });
 
 test('merges a delayed poll and send response without dropping messages or duplicating bubbles', () => {

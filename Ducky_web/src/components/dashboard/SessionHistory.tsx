@@ -23,10 +23,11 @@ import {
 } from "@/components/ui/dialog";
 import { useSessionHistory } from "@/hooks/useSessionHistory";
 import { AssistantMarkdown } from "@/components/chat/AssistantMarkdown";
+import { NewConversationButton } from "@/components/chat/NewConversationButton";
 import type { ChatMessage } from "@/types/chat";
 import type { Session, SessionStatus } from "@/types/session";
 import { cn } from "@/lib/utils";
-import { SessionCard } from "./SessionCard";
+import { SessionCard, SessionResumeLink } from "./SessionCard";
 
 type SessionFilter = "all" | SessionStatus;
 
@@ -304,15 +305,18 @@ export function SessionHistory() {
             ))}
           </div>
 
-          <div className="flex flex-wrap gap-4 text-xs text-gray-400 dark:text-gray-500">
-            <span className="inline-flex items-center gap-1.5">
-              <Clock3 className="size-3.5 text-amber-500" />
-              진행 중
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <CheckCircle2 className="size-3.5 text-emerald-500" />
-              완료됨
-            </span>
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex flex-wrap gap-4 text-xs text-gray-400 dark:text-gray-500">
+              <span className="inline-flex items-center gap-1.5">
+                <Clock3 className="size-3.5 text-amber-500" />
+                진행 중
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <CheckCircle2 className="size-3.5 text-emerald-500" />
+                완료됨
+              </span>
+            </div>
+            <NewConversationButton />
           </div>
         </div>
 
@@ -409,6 +413,11 @@ export function SessionHistory() {
                       {selectedSession.messageCount}개 메시지
                     </span>
                   </DialogDescription>
+                  {selectedSession.status === "in_progress" && (
+                    <div className="mt-2 flex justify-start">
+                      <SessionResumeLink session={selectedSession} />
+                    </div>
+                  )}
                 </DialogHeader>
 
                 {isLoadingDetail ? (

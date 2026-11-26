@@ -24,6 +24,7 @@ import {
   type DeviceResponse,
 } from "@/lib/api/devices";
 import {
+  getRecordingRetryNotice,
   isRecordingCommandActive,
   reconcileRecordingCommand,
   shouldRefreshRecordingMessages,
@@ -31,6 +32,7 @@ import {
 import { ChatBubble } from "./ChatBubble";
 import { ChatInput } from "./ChatInput";
 import { HintPanel } from "./HintPanel";
+import { NewConversationButton } from "./NewConversationButton";
 
 const comfortaa = Comfortaa({
   subsets: ["latin"],
@@ -45,19 +47,20 @@ function getRaspberryErrorMessage(error: unknown) {
   return "라즈베리 명령을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.";
 }
 
-export function ChatPage() {
+export function ChatPage({ conversationId }: { conversationId?: string }) {
   const [draft, setDraft] = useState("");
   const [isHintOpen, setIsHintOpen] = useState(false);
   const [raspberryDeviceId, setRaspberryDeviceId] = useState<string | null>(null);
   const [raspberryDeviceStatus, setRaspberryDeviceStatus] = useState<string | null>(null);
   const [raspberryError, setRaspberryError] = useState<string | null>(null);
+  const [raspberryNotice, setRaspberryNotice] = useState<string | null>(null);
   const [isRaspberryCommandPending, setIsRaspberryCommandPending] = useState(false);
   const [isStartingRaspberry, setIsStartingRaspberry] = useState(false);
   const lastRaspberryCommandRef = useRef<DeviceCommandResponse | null>(null);
   const startingRaspberryRef = useRef(false);
   const previousRaspberryStatusRef = useRef<string | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
-  const chat = useChatSession();
+  const chat = useChatSession({ conversationId });
   const {
     activeSession,
     completeSession,
@@ -122,7 +125,9 @@ export function ChatPage() {
     const command = reconcileRecordingCommand(previous, incoming);
     lastRaspberryCommandRef.current = command;
     setIsRaspberryCommandPending(isRecordingCommandActive(command));
-    if (command?.status === "FAILED") {
+    const notice = getRecordingRetryNotice(command, activeSession.id);
+    setRaspberryNotice(notice);
+    if (command?.status === "FAILED" && String(command.conversationId) === activeSession.id && !notice) {
       setRaspberryError(command.errorMessage ?? "라즈베리 녹음 명령을 처리하지 못했습니다.");
     } else {
       setRaspberryError(null);
@@ -138,6 +143,7 @@ export function ChatPage() {
     }
 
     setRaspberryError(null);
+    setRaspberryNotice(null);
     startingRaspberryRef.current = true;
     setIsStartingRaspberry(true);
 
@@ -288,13 +294,16 @@ export function ChatPage() {
                 >
                   Ducky
                 </h1>
-                <p className="truncate text-xs text-gray-500 dark:text-gray-400">
-                  {activeSession.topic} 질문 훈련
+                <p className="truncate text-xs text-gray-500 dark:text-gray-400" title={activeSession.title}>
+                  {activeSession.title}
                 </p>
               </div>
             </div>
 
             <div className="flex shrink-0 items-center gap-2">
+              <NewConversationButton
+                disabled={isLoadingSession || isThinking || isRaspberryBusy || voice.status !== "idle"}
+              />
               <Button
                 type="button"
                 variant="outline"
@@ -400,6 +409,14 @@ export function ChatPage() {
               <div ref={bottomRef} />
             </div>
           </ScrollArea>
+
+          <div role="status" className="shrink-0">
+            {raspberryNotice && (
+              <p className="mx-3 mb-2 rounded-lg border border-[#F0E0A8] bg-[#FFF6DC] px-4 py-2 text-sm text-[#5C4413] sm:mx-5 lg:mx-8 dark:border-[#5C4413]/40 dark:bg-[#2A2310] dark:text-[#E8C97A]">
+                {raspberryNotice}
+              </p>
+            )}
+          </div>
 
           <ChatInput
             disabled={isThinking || isCompleted || isLoadingSession || !isReady}

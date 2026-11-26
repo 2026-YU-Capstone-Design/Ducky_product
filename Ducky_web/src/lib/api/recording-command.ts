@@ -1,5 +1,20 @@
 import type { DeviceCommandResponse } from "./devices";
 
+export function getRecordingRetryNotice(
+  command: DeviceCommandResponse | null,
+  conversationId: string,
+) {
+  if (
+    command?.status === "FAILED" &&
+    String(command.conversationId) === conversationId &&
+    command.errorMessage === "Native voice turn did not complete"
+  ) {
+    return "음성을 확인하지 못했어요. 다시 말해 주세요.";
+  }
+
+  return null;
+}
+
 export function isRecordingCommandActive(command: DeviceCommandResponse | null) {
   return command?.status === "PENDING" || command?.status === "CLAIMED";
 }

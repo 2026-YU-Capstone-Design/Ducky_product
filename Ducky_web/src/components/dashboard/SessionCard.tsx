@@ -1,7 +1,8 @@
 "use client";
 
-import { CalendarDays, Loader2, MessageCircle, Sparkles, Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ArrowRight, CalendarDays, Loader2, MessageCircle, Sparkles, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { Button, buttonVariants } from "@/components/ui/button";
 import type { Session } from "@/types/session";
 import { cn } from "@/lib/utils";
 
@@ -22,6 +23,24 @@ function formatDate(value: string) {
     month: "long",
     day: "numeric",
   }).format(new Date(value));
+}
+
+export function SessionResumeLink({ session }: { session: Session }) {
+  if (session.status !== "in_progress") return null;
+
+  return (
+    <Link
+      href={{ pathname: "/chat", query: { conversationId: session.id } }}
+      aria-label={`${session.title} 이어하기`}
+      className={cn(
+        buttonVariants({ size: "sm" }),
+        "h-8 flex-1 gap-2 bg-[#FECA43] font-semibold text-[#2E2A22] hover:bg-[#F5B522]",
+      )}
+    >
+      이어하기
+      <ArrowRight className="size-3.5" aria-hidden="true" />
+    </Link>
+  );
 }
 
 export function SessionCard({
@@ -92,14 +111,18 @@ export function SessionCard({
           </div>
         </div>
       </button>
-      <div className="border-t border-amber-100/80 px-4 py-2 dark:border-white/10 sm:px-5">
+      <div className="flex items-center gap-2 border-t border-amber-100/80 px-4 py-2 dark:border-white/10 sm:px-5">
+        <SessionResumeLink session={session} />
         <Button
           type="button"
           variant="outline"
           size="sm"
           disabled={isDeleting}
           onClick={() => onDelete(session)}
-          className="h-8 w-full gap-2 border-red-200 bg-white text-red-700 hover:bg-red-50 dark:border-red-500/30 dark:bg-transparent dark:text-red-200 dark:hover:bg-red-500/10"
+          className={cn(
+            "h-8 gap-2 border-red-200 bg-white text-red-700 hover:bg-red-50 dark:border-red-500/30 dark:bg-transparent dark:text-red-200 dark:hover:bg-red-500/10",
+            isCompleted && "w-full",
+          )}
         >
           {isDeleting ? (
             <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />

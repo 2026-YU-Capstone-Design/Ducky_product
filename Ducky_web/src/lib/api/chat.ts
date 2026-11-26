@@ -51,11 +51,12 @@ export interface BackendEndConversationResponse {
 export function startConversation(payload: {
   title: string;
   topic: string;
-}) {
+}, signal?: AbortSignal) {
   return apiRequest<BackendConversationSummary>("/api/chat/conversations", {
     method: "POST",
     auth: true,
     body: payload,
+    signal,
   });
 }
 
@@ -74,6 +75,20 @@ export function getConversation(conversationId: string) {
       auth: true,
     },
   );
+}
+
+export async function loadChatConversation(conversationId?: string) {
+  if (conversationId !== undefined) {
+    if (!/^[1-9]\d{0,18}$/.test(conversationId)) {
+      throw new Error("잘못된 세션 주소입니다. 세션 기록에서 다시 열어 주세요.");
+    }
+    return getConversation(conversationId);
+  }
+
+  const conversations = await listConversations();
+  const conversation = conversations.find((item) => item.status === "in_progress")
+    ?? await startConversation({ title: "Ducky learning session", topic: "러버덕 질문 훈련" });
+  return getConversation(conversation.id);
 }
 
 export function sendChatMessage(payload: {
