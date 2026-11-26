@@ -5,10 +5,9 @@ import { uploadDocument, waitForDocument } from "@/lib/api/documents";
 import {
   endConversation,
   getConversation,
-  listConversations,
+  loadChatConversation,
   requestChatHint,
   sendChatMessage,
-  startConversation,
   type BackendChatMessage,
   type BackendConversationSummary,
 } from "@/lib/api/chat";
@@ -25,6 +24,7 @@ import type {
 } from "@/types/chat";
 
 interface UseChatSessionOptions {
+  conversationId?: string;
   enabled?: boolean;
 }
 
@@ -164,7 +164,7 @@ function getErrorMessage(error: unknown) {
   return "채팅 서버와 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.";
 }
 
-export function useChatSession({ enabled = true }: UseChatSessionOptions = {}) {
+export function useChatSession({ conversationId, enabled = true }: UseChatSessionOptions = {}) {
   const isLoadingRef = useRef(false);
   const refreshVersion = useRef(0);
   const processingController = useRef<AbortController | null>(null);
@@ -208,18 +208,7 @@ export function useChatSession({ enabled = true }: UseChatSessionOptions = {}) {
     setError(null);
 
     try {
-      const conversations = await listConversations();
-      const inProgressConversation = conversations.find(
-        (conversation) => conversation.status === "in_progress",
-      );
-      const conversation =
-        inProgressConversation ??
-        (await startConversation({
-          title: "Ducky learning session",
-          topic: "러버덕 질문 훈련",
-        }));
-
-      const detail = await getConversation(conversation.id);
+      const detail = await loadChatConversation(conversationId);
       const nextMessages = detail.messages.map((message) =>
         toChatMessage(message),
       );
@@ -235,7 +224,7 @@ export function useChatSession({ enabled = true }: UseChatSessionOptions = {}) {
       isLoadingRef.current = false;
       setIsLoadingSession(false);
     }
-  }, [enabled]);
+  }, [conversationId, enabled]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {

@@ -335,7 +335,9 @@ export function HomeDashboard() {
 
             {activeSession && (
               <Link
-                href={activeSession.status === "in_progress" ? "/chat" : "/sessions"}
+                href={activeSession.status === "in_progress"
+                  ? { pathname: "/chat", query: { conversationId: activeSession.id } }
+                  : "/sessions"}
                 className="group relative flex flex-col gap-3 overflow-hidden rounded-2xl border border-amber-200/80 bg-gradient-to-br from-amber-50 to-yellow-50/60 p-5 shadow-[0_1px_2px_rgba(0,0,0,0.03)] transition-all duration-200 hover:-translate-y-0.5 hover:border-amber-400 hover:shadow-[0_8px_24px_-8px_rgba(217,119,6,0.3)] active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400 dark:border-amber-800/40 dark:from-amber-900/20 dark:to-yellow-900/10"
               >
                 <div
