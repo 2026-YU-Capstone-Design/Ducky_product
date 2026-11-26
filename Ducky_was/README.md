@@ -14,7 +14,7 @@
 | --- | --- |
 | [문경](https://github.com/mujang3) | 백엔드 · IoT |
 | [은진](https://github.com/yim-eun-jin) | 백엔드 |
-| 제환 | AI |
+| [제환](https://github.com/PARKJEHWAN) | AI |
 
 ## 로컬 개발
 
