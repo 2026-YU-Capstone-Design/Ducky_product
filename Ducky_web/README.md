@@ -1,30 +1,64 @@
-## 👥 팀원 소개
+# Ducky Web
 
+**Next.js 16 · React 19 · TypeScript · Tailwind CSS 4**
 
-| <img src="https://avatars.githubusercontent.com/u/84740013?v=4" width="150" height="150"/> | <img src="https://avatars.githubusercontent.com/u/139312570?v=4" width="150" height="150"/> |
-|:-------------------------------------------------------------------------------------------:|:-------------------------------------------------------------------------------------------:|
-|                                             FE                                              |                                             FE                                              |                                             
-|                  Kim Jeong Un<br/>[@vni911](https://github.com/vni911)                   |                      Shin Hye Jin<br/>[@hyeji-neee](https://github.com/hyeji-neee)                      |
+Ducky의 웹 클라이언트입니다. 사용자는 텍스트나 음성으로 질문하고, 디버깅 힌트와 문서 출처를 확인합니다. 설정에서 학습 자료와 등록 기기를 관리합니다.
 
-<br>
+[제품 소개](../README.md) · [백엔드 API](../Ducky_was/README.md) · [문서 처리](../Ducky_rag/README.md)
 
-### **Commit Message 규칙**
+<p align="center">
+  <img src="public/images/splash1.png" alt="Ducky 시작 화면에 사용하는 캐릭터 일러스트" width="300" />
+</p>
 
-| 메시지 타입 | 설명 |
-| :--- | :--- |
-| **feat** | 새로운 기능을 추가하거나 기존 기능을 수정할 때 사용합니다. |
-| **fix** | 버그를 수정할 때 사용합니다. |
-| **docs** | 문서를 수정할 때 사용합니다. |
-| **style** | 코드의 스타일이나 포맷을 변경할 때 사용합니다(기능 변경 없음). |
-| **revert** | 이전 커밋으로 되돌릴 때 사용합니다. |
+## 주요 화면
 
-## 프론트엔드 배포
+| 경로 | 화면 | 할 수 있는 일 |
+| --- | --- | --- |
+| `/`, `/onboarding` | 로그인·온보딩 | 이메일 로그인과 회원가입, 카카오·네이버 로그인, 학습 유형 설정 |
+| `/dashboard`, `/chat` | 대시보드·채팅 | 새 대화 시작, 문서 첨부, 힌트 확인, 브라우저 음성 입력과 Raspberry Pi 녹음 요청 |
+| `/sessions`, `/analysis` | 세션·분석 | 이전 대화 열기, 학습 분석 화면 조회 |
+| `/settings` | 설정 | 학습 유형, 자료실, 연동 기기 관리 |
 
-`main`에 병합하면 `publish.yml`이 프론트엔드·백엔드 이미지를 GHCR에 올린다. 두 이미지 발행이 성공하면 프론트엔드의 `deploy` 태그를 갱신한다. EC2는 2분마다 이 태그를 확인하고, 새 이미지가 있으면 digest를 고정해 Compose 컨테이너를 교체한다. 기존 다운로드가 진행 중이면 다음 확인까지 더 걸릴 수 있다.
+## 개발 시작
 
-GitHub 러너는 최대 10분 동안 `ducklab.site`의 커밋 SHA와 첫 화면의 빌드 ID를 확인한다. 이미지 발행만으로 배포 성공을 표시하지 않는다. 실패 시 자동 복구하지 않으며 아래 수동 복구 절차를 따른다. Actions의 수동 실행은 이미지 발행까지만 진행하고 `deploy` 태그를 바꾸지 않는다.
+채팅·자료 업로드까지 확인하려면 [저장소 루트의 통합 실행](../README.md#빠른-시작)을 사용하세요. 웹만 실행하려면 `Ducky_web`에서 Node.js 24 이상으로 아래 명령을 실행합니다.
 
-이 방식은 AWS OIDC·SSM·AWS 액세스 키를 사용하지 않는다. 기존 OIDC 역할은 공급자 미등록으로 인증·배포를 검증하지 못한 상태이며, 무료 플랜의 고급 기능을 활성화할 필요가 없다. 기존 AWS Actions Variables는 이 워크플로에서 사용하지 않는다.
+```sh
+npm ci
+npm run dev
+```
+
+개발 서버 기본 주소는 [localhost:3000](http://localhost:3000)입니다. 로그인과 자료실을 사용하려면 별도로 접근 가능한 Spring API가 필요합니다. 필요한 값을 `.env.local`에 설정하고 개발 서버를 재시작하세요.
+
+| 환경 변수 | 용도 |
+| --- | --- |
+| `NEXT_PUBLIC_API_BASE_URL` | Spring API의 기본 주소. 미설정 시 `http://localhost:8080` |
+| `NEXT_PUBLIC_KAKAO_REST_API_KEY` | 카카오 OAuth 클라이언트 설정 |
+| `NEXT_PUBLIC_NAVER_CLIENT_ID` | 네이버 OAuth 클라이언트 설정 |
+
+다른 포트의 웹에서 Spring을 호출할 때는 백엔드 CORS 허용 목록에 웹 주소를 추가합니다. OAuth 클라이언트 비밀값은 [Spring 환경 변수](../Ducky_was/.env.example)로 관리합니다.
+
+## 코드와 검증
+
+| 디렉터리 | 역할 |
+| --- | --- |
+| [src/app](src/app) | App Router 페이지 |
+| [src/components](src/components) | 인증, 채팅, 설정 등 화면 구성 요소 |
+| [src/hooks](src/hooks) | 대화 세션, 음성 입력, 인증 상태 |
+| [src/lib/api](src/lib/api) | Spring API 요청과 기기 명령 상태 처리 |
+
+```sh
+npm run lint
+npm test
+npm run build
+```
+
+## 배포
+
+[이미지 발행 워크플로](../.github/workflows/publish.yml)는 `main` 푸시에서 웹과 백엔드 이미지를 GHCR에 발행합니다. 두 이미지의 발행이 성공하면 웹의 `deploy` 태그가 갱신됩니다. EC2의 systemd 타이머가 2분마다 태그를 확인해 새 digest로 컨테이너를 교체합니다. 워크플로는 최대 10분 동안 운영 사이트의 커밋 SHA와 빌드 ID를 확인합니다. Actions 수동 실행은 이미지 발행까지만 진행합니다.
+
+<details>
+<summary>EC2 초기 설정, Compose 전환 및 수동 복구</summary>
 
 ### 최초 설정
 
@@ -100,3 +134,14 @@ curl -fsS http://127.0.0.1:3000/ -o /dev/null
 ```
 
 수정한 커밋이 `main`에 병합되어 새 `deploy` 이미지가 발행된 후 `sudo systemctl enable --now ducky-frontend-update.timer`로 자동배포를 재개한다. Actions가 시간 초과되더라도 타이머는 계속 확인하므로, 배포를 중단하려면 위 비활성화 명령을 실행해야 한다. 오래된 이미지 정리는 자동으로 수행하지 않는다.
+
+</details>
+
+## 프론트엔드 팀
+
+| 이름 | GitHub |
+| --- | --- |
+| Kim Jeong Un | [@vni911](https://github.com/vni911) |
+| Shin Hye Jin | [@hyeji-neee](https://github.com/hyeji-neee) |
+
+커밋 접두사는 기능 `feat`, 수정 `fix`, 문서 `docs`, 코드 스타일 `style`, 되돌리기 `revert`를 사용합니다.

@@ -1,24 +1,42 @@
-# Ducky 디버깅 학습 문서 처리
+# Ducky RAG
 
-현재 구현은 **PDF → 원본 보관 → 텍스트 추출 및 스캔 OCR → Ducky 학습 문서 정규화 → 청킹 → 로컬 어휘 벡터 저장 → 사용자별 검색 → 웹 발췌 답변**이다. 외부 API와 AWS 없이 실행할 수 있다.
+**Python 3.12 · PyMuPDF · Tesseract OCR · AWS Lambda**
 
-`normalization.py`가 코드·수식·표·짧은 기술 용어를 보존한다. 문서 ID와 사용자 권한은 Spring에서 관리하며, `DocumentProcessorClient`가 HTTP 처리기와 통신한다.
+강의 자료, 코드 예제, 오류 로그를 **출처가 있는 검색 단위**로 변환합니다. Python은 텍스트 추출·정규화·청킹을 담당하고, [Spring](../Ducky_was/README.md)이 사용자별 색인·BM25 검색·답변 출처 저장을 맡습니다.
 
-이 처리기는 러버덕 디버깅 학습에 사용하는 강의 자료·코드 예제·오류 로그·학습 노트를 검색 가능한 근거로 만든다. 재현 코드, 실제 오류, 기대 동작, 학습자의 확인 질문이 원문 문맥과 함께 남도록 처리한다. 질문에 바로 답할지 힌트로 유도할지는 `Ducky_was`의 대화 정책이 결정한다.
+[제품 소개](../README.md) · [AWS 문서 모드](../Ducky_was/docs/DOCUMENT_CLOUD.md) · [대화 하네스](../Ducky_was/docs/CONVERSATION_HARNESS.md)
 
-## 코드 구성
+## 문서가 답변에 쓰이기까지
 
-- `ducky_rag/pipeline.py`: 입력 형식·크기 검증, PDF 텍스트 변환, 청크와 처리 결과 생성.
-- `ducky_rag/normalization.py`: 코드·스택 트레이스·수식·표 보존, 블록 ID·제목 경로·원문 줄 위치 관리.
-- `ducky_rag/server.py`: Spring이 호출하는 내부 HTTP 처리기.
-- `ducky_rag/pdf_layout.py`, `ducky_rag/chunking.py`: PDF 페이지 출처와 청크 문맥을 구성한다.
-- `ducky_rag/aws_contract.py`, `ducky_rag/lambda_handler.py`: S3 이벤트와 SQS 배치, 처리 산출물과 완료 메시지 계약을 처리한다.
-- `tests/`: 디버깅 학습 자료와 처리 실패 사례 검증.
-- `scripts/smoke.py`: 실제 업로드·소유자별 검색·발췌 답변·근거 저장 통합 검증.
+```mermaid
+flowchart TD
+    Upload["문서 업로드"] --> Extract["텍스트 추출 · 스캔 OCR"]
+    Extract --> Chunks["정규화 · 문맥과 출처가 있는 청크"]
+    Chunks --> Index["Spring 사용자별 색인"]
+    Index --> Search["BM25 검색 · 참고 문서 표시"]
+```
 
-로컬 경로는 문서 변환, 검색과 발췌 답변을 제공한다. 기존 OpenAI Responses 답변 호출은 유지되며 `rag-local` 프로필에서는 호출하지 않는다. Lambda를 사용하는 AWS 경로는 실제 배포 환경에서 별도로 검증한다.
+| 구분 | 동작 |
+| --- | --- |
+| 파일 형식 | Python 처리기는 PDF, TXT, MD, CSV, JSON을 처리합니다. DOCX·PPTX는 로컬 모드에서 Spring 추출 경로를 사용합니다. |
+| 문맥 보존 | 문서 제목 경로와 PDF 쪽 번호를 기록하고, 코드 들여쓰기·스택 트레이스·수식·Markdown 표 구조를 보존합니다. |
+| 로컬 모드 | Spring이 루프백 HTTP 처리기에 요청하고, 웹에는 검색 후보의 발췌와 출처가 표시됩니다. |
+| AWS 문서 모드 | S3 원본과 SQS 요청으로 Lambda가 처리하며, Spring이 완료 메시지와 산출물을 확인한 뒤 색인합니다. |
 
-## 로컬 실행 (PowerShell, 저장소 루트)
+## 실행하기
+
+웹까지 확인하려면 [루트의 빠른 시작](../README.md#빠른-시작)을 사용합니다. 서드파티 모델 키 없이 문서를 올리고 색인과 발췌 답변을 확인할 수 있습니다. Python 작업만 점검할 때는 아래 경로와 검증 절차를 참고하세요.
+
+| 코드 | 역할 |
+| --- | --- |
+| [pipeline.py](ducky_rag/pipeline.py) | 입력 검증, 텍스트 변환, 결과 조립 |
+| [normalization.py](ducky_rag/normalization.py), [chunking.py](ducky_rag/chunking.py) | 원문 구조 보존과 청크 구성 |
+| [server.py](ducky_rag/server.py) | 내부 HTTP `/health`, `/process` |
+| [lambda_handler.py](ducky_rag/lambda_handler.py), [aws_contract.py](ducky_rag/aws_contract.py) | S3·SQS 이벤트와 산출물 계약 |
+| [tests](tests), [smoke.py](scripts/smoke.py) | 처리기 테스트와 업로드·검색·인용 통합 검증 |
+
+<details>
+<summary>서비스별 수동 실행과 OCR 설치 · PowerShell</summary>
 
 Python 3.12, Java 17, Node/npm이 필요하다. 설치 명령은 최초 한 번 실행한다.
 
@@ -56,6 +74,8 @@ npm.cmd run dev -- --hostname 127.0.0.1 --port 13000
 `http://127.0.0.1:13000`에서 회원가입·학습 유형 설정을 마친 뒤 설정의 자료실에 PDF를 업로드한다. `색인 완료` 후 대화에서 문서 내용을 질문한다. 채팅에 직접 첨부해도 업로드와 처리 완료를 기다린 후 질문이 전송된다. 답변에 `문서 발췌 모드 · 외부 AI 미사용`과 펼쳐 볼 수 있는 참고 문서가 표시된다.
 
 DB는 `Ducky_was/data/rag-local.mv.db`, 원본·산출물은 `Ducky_was/data/documents/{userId}/{documentId}/`에 남는다. 운영 DB 및 기존 계정과 분리된다. 개발용 인증 비밀값을 사용하는 이 프로필은 루프백 주소에만 바인딩한다.
+
+</details>
 
 ## Lambda 이미지와 개발 환경
 
@@ -103,7 +123,7 @@ $env:TESSDATA_PREFIX = (Resolve-Path '.runtime/ducky-tessdata').Path
 - 청크: `blockId`, `chunkKey`, `content`, `textForEmbedding`, `headingPath`, `blockType`, `previousBlockId`, `nextBlockId`. Markdown 표 행과 블록 수식은 유지하고, 긴 본문·코드는 공백과 기호를 변경하지 않고 분할한다. 코드 블록의 언어·들여쓰기·빈 줄을 보존한다.
 - 저장: `source`, `document.md`, `canonical.jsonl`, `result.json`. 파일 이름을 저장 경로로 사용하지 않는다. DB에 청크 내용·출처·벡터 모델을 저장한다.
 - 벡터: `lexical-ko-en-v1`, 단어 및 한국어 2글자 특징의 정규화 sparse map. 고정 차원의 dense 벡터가 아니다. 기존 64차원 해시 청크는 호환 읽기를 유지한다.
-- 검색: `POST /api/documents/search`, `{query, limit, documentIds?}`. 모든 후보를 로그인 사용자 및 완료 상태로 제한한다. ID 범위를 지정하면 각 ID의 소유권도 검사한다. 빈 ID 목록은 검색 결과 없음이다.
+- BM25 검색: `POST /api/documents/search`, `{query, limit, documentIds?}`. 모든 후보를 로그인 사용자 및 완료 상태로 제한한다. ID 범위를 지정하면 각 ID의 소유권도 검사한다. 빈 ID 목록은 검색 결과 없음이다.
 - 답변: 기존 `/api/chat/messages`. 참고한 문서 ID·청크 ID·블록 ID·본문을 대화 메시지에 저장하고 `sources[]`로 반환한다. 문서를 지워도 기존 대화의 인용 기록은 유지된다.
 - 중복·경쟁: DB 행 잠금과 처리 시도 토큰을 사용한다. 이미 완료된 작업은 다시 적재하지 않고, 변환 도중 삭제된 문서는 되살리지 않는다. SHA-256/문서 ID/스키마가 다른 결과는 실패 처리한다. 프로세스 중단 후 유효기간이 지난 작업은 실패로 바꾸고 재시도할 수 있게 한다.
 
@@ -115,7 +135,7 @@ $env:TESSDATA_PREFIX = (Resolve-Path '.runtime/ducky-tessdata').Path
 - PDF/TXT/MD/CSV/JSON이 새 경로다. DOCX/PPTX는 기존 Spring 추출 경로를 유지한다.
 - TXT/CSV/JSON은 원문을 보존하며 Markdown 제목으로 재해석하지 않는다. 현재 표 행 구조화 대상은 Markdown 표다. HTML 표는 본문으로 보존하며 셀별 구조화는 추가 검증이 필요하다.
 - 정규화 변경 전에 이미 저장된 청크는 자동으로 바뀌지 않는다. 새 정책으로 처리하려면 로컬 검증 문서를 다시 업로드해야 한다. 운영 도입 전 일괄 재색인 경로는 별도 작업이다.
-- 로컬 검색은 소유자 청크를 메모리에서 점수화한다. pgvector 인덱스, BM25/hybrid, 대규모 자료 검색, 의미 검색 품질은 구현·검증 대상에 남아 있다.
+- Spring은 소유자 범위의 청크에 BM25 점수를 계산한다. 운영 규모에서의 검색 성능과 의미 검색 품질은 별도 검증이 필요하다.
 - 발췌 모드는 LLM이 아니다. 자료가 없으면 근거를 찾지 못했다고 안내한다. 일반 지식 답변 품질과 실제 OpenAI 호출은 이번 검증 범위가 아니다.
 - 파일 저장과 DB는 서로 다른 저장소이므로 운영 도입 전 장애 시 orphan artifact 정리와 스키마 이전 절차가 필요하다.
 

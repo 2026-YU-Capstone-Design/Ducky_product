@@ -1,36 +1,77 @@
-# Ducky_product
+<div align="center">
+  <img src="Ducky_web/public/icons/ducky-character-192.png" alt="Ducky 캐릭터" width="104" />
+  <h1>Ducky</h1>
+  <p><strong>말로 풀어가는 러버덕 디버깅과 학습</strong></p>
+  <p>
+    <a href="https://ducklab.site">웹 서비스</a> ·
+    <a href="#빠른-시작">빠른 시작</a> ·
+    <a href="#저장소-구성">모듈 가이드</a>
+  </p>
+</div>
 
-## 로컬에서 수정하고 테스트하기
+## Ducky로 할 수 있는 일
 
-문서 업로드·대화까지 확인하려면 프론트, Spring 백엔드, Python 문서 처리기가 필요합니다.
-Java 17, Node.js 24 이상, Python 3.12를 설치한 뒤 **저장소 루트**에서 실행하세요.
-Windows PowerShell에서는 `npm` 대신 `npm.cmd`를 사용해도 됩니다.
+| 기능 | 사용자 흐름 |
+| --- | --- |
+| **러버덕 디버깅** | 문제 상황과 기대 동작을 설명하면 Ducky가 확인 질문이나 단계별 힌트를 제시합니다. |
+| **자료를 참고하는 답변** | 강의 자료나 코드 예제를 업로드하고 질문하면 검색된 문서 발췌와 출처를 대화에서 확인할 수 있습니다. |
+| **음성으로 대화** | 브라우저 마이크로 입력하거나, 등록한 Raspberry Pi의 마이크와 스피커로 대화할 수 있습니다. |
+| **학습 이어가기** | 학습 유형을 설정하고 세션 기록에서 이전 대화를 다시 열 수 있습니다. |
+
+## 서비스 구성
+
+```mermaid
+flowchart LR
+    Web["Web · Next.js"] <-->|"채팅 · 문서 · 기기 제어"| WAS["WAS · Spring Boot"]
+    Pi["Raspberry Pi"] <-->|"음성 대화 · 기기 상태"| WAS
+    WAS -->|"문서 변환 요청"| RAG["RAG · Python"]
+    WAS -->|"계정 · 대화 · 문서 색인"| DB[("H2 / PostgreSQL")]
+```
+
+로컬에서는 Spring이 Python HTTP 처리기를 호출합니다. AWS 문서 모드에서는 S3와 SQS를 통해 Lambda가 원본을 처리하고, Spring이 완료 메시지를 검증해 색인합니다. 검색과 답변 정책은 Spring이 담당합니다. 자세한 흐름은 [RAG](Ducky_rag/README.md)와 [대화 하네스](Ducky_was/docs/CONVERSATION_HARNESS.md)에서 볼 수 있습니다.
+
+## 빠른 시작
+
+**Java 17 · Node.js 24 이상 · Python 3.12**를 설치하고 저장소 루트에서 실행합니다. Windows PowerShell에서 `npm` 실행이 제한되면 `npm.cmd`를 사용하세요.
 
 ```sh
-# 처음 한 번 / 의존성 변경 시
 npm run setup:local
-
-# 매번 개발 시작 시: 세 서비스가 함께 실행됩니다.
 npm run dev
 ```
 
-준비 완료 안내 뒤 **http://127.0.0.1:13000**을 열고 로컬 계정을 만드세요.
-첫 설치와 최초 Java 실행은 패키지·Gradle 다운로드 때문에 몇 분 걸릴 수 있습니다. 설치 완료 후 개발 명령을 실행하세요.
-API는 18080, 문서 처리기는 18091입니다. API 주소와 CORS를 자동으로 맞춥니다.
-기존에 사용 중인 포트가 있으면 실행을 중단하며 다른 프로세스를 종료하지 않습니다.
-`Ctrl+C`는 이번 명령이 시작한 서비스만 함께 종료합니다.
-Windows에서 일괄 작업 종료 `(Y/N)` 확인이 나오면 `Y`를 입력하세요.
+1. 실행 준비 메시지가 나오면 [로컬 웹](http://127.0.0.1:13000)을 열고 이메일로 로컬 계정을 만듭니다.
+2. 학습 유형을 설정하고, 설정의 **자료실**에서 PDF를 올리거나 채팅에 직접 첨부합니다.
+3. 문서가 **색인 완료**되면 문서에 있는 내용을 질문하고 답변의 **참고 문서**를 펼칩니다.
+
+| 서비스 | 기본 주소 |
+| --- | --- |
+| 웹 | [127.0.0.1:13000](http://127.0.0.1:13000) |
+| Spring API | [127.0.0.1:18080/api/health](http://127.0.0.1:18080/api/health) |
+| 문서 처리기 | [127.0.0.1:18091/health](http://127.0.0.1:18091/health) |
+
+> 초기 설치와 첫 Gradle 빌드에는 네트워크 연결이 필요합니다. 로컬 통합 환경은 H2와 문서 발췌 답변을 사용하며 AWS, Docker, 별도 PostgreSQL, LLM 키 없이 실행됩니다. 운영 모델 답변과 Raspberry Pi 대화에는 각 서비스에 맞는 설정이 필요합니다.
+
+<details>
+<summary>포트 변경과 로컬 검증</summary>
 
 ```sh
-# 기본 포트가 이미 사용 중인 경우
 npm run dev -- --api-port 18082 --worker-port 18093 --web-port 13002
+npm run test:local
 ```
 
-- AWS·Docker·별도 PostgreSQL·LLM 키 없이 사용할 수 있습니다. 답변은 로컬 발췌 모드이며 실제 LLM 품질 테스트와 구분합니다.
-- DB와 업로드 파일은 Git 제외 경로 `.runtime/local-dev/<API포트>/`에 보관하며 종료 뒤에도 유지합니다. 운영 DB 설정 대신 로컬 H2를 사용합니다.
-- 프론트 수정은 Next 개발 서버가 반영합니다. Java 수정은 IDE에서 컴파일하거나 `Ctrl+C` 후 다시 `npm run dev`로 빌드·시작하세요. Python 수정 후에도 다시 시작하세요.
-- 프론트 화면만 작업하려면 기존대로 `Ducky_web`에서 `npm run dev`를 사용할 수 있습니다. 이 명령만으로 backend API가 실행되지는 않습니다.
-- 초기 설치/Gradle 의존성 다운로드에는 인터넷이 필요합니다. 운영 AWS/LLM 서비스에는 연결하지 않습니다.
+- 통합 실행기가 API 주소와 CORS를 맞춥니다. 기본 포트가 이미 사용 중이면 실행을 중단합니다.
+- H2 DB와 업로드 파일은 `.runtime/local-dev/<API포트>/`에 보관됩니다. API 포트를 바꾸면 해당 포트의 개발 데이터가 사용됩니다.
+- `Ctrl+C`로 이번 실행에서 시작한 서비스를 종료합니다. Java나 Python 코드를 변경하면 재시작하세요.
 
-검증: `npm run test:local`은 포트 충돌, 준비 시간 초과, 자식 서비스 실패 및 종료 시 다른 프로세스 보존을 검사합니다.
-전체 작업 결과·별도 수동 실행·AWS 준비는 [다른 로컬 인계 문서](docs/DUCKY_1123_HANDOFF.md)를 참고하세요.
+</details>
+
+## 저장소 구성
+
+| 모듈 | 기술 | 담당 기능 |
+| --- | --- | --- |
+| [Ducky_web](Ducky_web/README.md) | Next.js 16 · React 19 · TypeScript | 채팅, 학습 기록, 자료실, 음성 입력과 기기 제어 |
+| [Ducky_was](Ducky_was/README.md) | Java 17 · Spring Boot · PostgreSQL | 인증, 대화 라우팅, 문서 검색, IoT API |
+| [Ducky_rag](Ducky_rag/README.md) | Python 3.12 · PyMuPDF · OCR | 문서 변환, 정규화, 청킹, AWS Lambda 처리 |
+| [Ducky_AI_temporary](Ducky_AI_temporary/README.md) | Raspberry Pi · Arduino Nano | 음성 대화 클라이언트, 물리 버튼과 상태 LED |
+
+[개발·운영 인계 문서](docs/DUCKY_1123_HANDOFF.md) · [통합 CI](.github/workflows/ci.yml) · [이미지 발행 워크플로](.github/workflows/publish.yml)
