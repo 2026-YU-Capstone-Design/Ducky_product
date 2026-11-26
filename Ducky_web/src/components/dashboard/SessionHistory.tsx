@@ -26,7 +26,7 @@ import { AssistantMarkdown } from "@/components/chat/AssistantMarkdown";
 import type { ChatMessage } from "@/types/chat";
 import type { Session, SessionStatus } from "@/types/session";
 import { cn } from "@/lib/utils";
-import { SessionCard } from "./SessionCard";
+import { SessionCard, SessionResumeLink } from "./SessionCard";
 
 type SessionFilter = "all" | SessionStatus;
 
@@ -407,6 +407,11 @@ export function SessionHistory() {
                       {selectedSession.messageCount}개 메시지
                     </span>
                   </DialogDescription>
+                  {selectedSession.status === "in_progress" && (
+                    <div className="mt-2 flex justify-start">
+                      <SessionResumeLink session={selectedSession} />
+                    </div>
+                  )}
                 </DialogHeader>
 
                 {isLoadingDetail ? (
