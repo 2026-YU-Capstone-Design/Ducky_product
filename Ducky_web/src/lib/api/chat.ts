@@ -51,11 +51,12 @@ export interface BackendEndConversationResponse {
 export function startConversation(payload: {
   title: string;
   topic: string;
-}) {
+}, signal?: AbortSignal) {
   return apiRequest<BackendConversationSummary>("/api/chat/conversations", {
     method: "POST",
     auth: true,
     body: payload,
+    signal,
   });
 }
 

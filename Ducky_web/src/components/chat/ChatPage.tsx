@@ -32,6 +32,7 @@ import {
 import { ChatBubble } from "./ChatBubble";
 import { ChatInput } from "./ChatInput";
 import { HintPanel } from "./HintPanel";
+import { NewConversationButton } from "./NewConversationButton";
 
 const comfortaa = Comfortaa({
   subsets: ["latin"],
@@ -300,6 +301,9 @@ export function ChatPage({ conversationId }: { conversationId?: string }) {
             </div>
 
             <div className="flex shrink-0 items-center gap-2">
+              <NewConversationButton
+                disabled={isLoadingSession || isThinking || isRaspberryBusy || voice.status !== "idle"}
+              />
               <Button
                 type="button"
                 variant="outline"
