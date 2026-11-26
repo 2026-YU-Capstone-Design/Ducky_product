@@ -141,7 +141,7 @@ curl -fsS http://127.0.0.1:3000/ -o /dev/null
 
 | 이름 | GitHub |
 | --- | --- |
-| Kim Jeong Un | [@vni911](https://github.com/vni911) |
+| 정운 | [@vni911](https://github.com/vni911) |
 | Shin Hye Jin | [@hyeji-neee](https://github.com/hyeji-neee) |
 
 커밋 접두사는 기능 `feat`, 수정 `fix`, 문서 `docs`, 코드 스타일 `style`, 되돌리기 `revert`를 사용합니다.
